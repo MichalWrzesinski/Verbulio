@@ -73,6 +73,69 @@ def answer(question, correct=True):
     return {"questionNumber": question["number"], "choice": index}
 
 
+def start_placement(owner, other, anonymous):
+    endpoint = "/api/v1/local-placement/tests"
+    anonymous.request(endpoint, 401, "POST")
+    initial = owner.request(endpoint, method="POST")
+    assert owner.request(endpoint, method="POST") == initial
+    old = f"{endpoint}/{initial['id']}"
+    old_answer = {"questionNumber": 1, "skip": True}
+    for browser, denied in [(anonymous, 401), (other, 404)]:
+        browser.request(old, denied)
+        browser.request(old + "/restart", denied, "POST")
+        browser.request(old + "/answers", denied, "POST", old_answer, str(uuid.uuid4()))
+    owner.request(old + "/answers", 400, "POST", {**old_answer, "result": "C2"}, str(uuid.uuid4()))
+    assert owner.request(old) == initial
+
+    replacement = owner.request(old + "/restart", method="POST")
+    assert replacement["id"] != initial["id"]
+    owner.request(old, 404)
+    owner.request(old + "/answers", 404, "POST", old_answer, str(uuid.uuid4()))
+    resource = f"{endpoint}/{replacement['id']}"
+    key = str(uuid.uuid4())
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        responses = [
+            pool.submit(owner.request, resource + "/answers", 200, "POST", old_answer, key)
+            for _ in range(2)
+        ]
+    first = responses[0].result()
+    assert first == responses[1].result()
+    assert first["test"]["answeredCount"] == 1
+    assert first["test"]["result"] is None
+    owner.request(resource + "/answers", 422, "POST",
+                  {"questionNumber": 2, "text": "test"}, key)
+    owner.request(resource + "/answers", 409, "POST", old_answer, str(uuid.uuid4()))
+    return resource, first, key
+
+
+def finish_placement(owner, resource, first, key):
+    assert owner.request(resource) == first
+    duplicate = owner.request(resource + "/answers", 200, "POST",
+                              {"questionNumber": 1, "skip": True}, key)
+    assert duplicate == first
+    current = duplicate["test"]
+    for number in range(2, 21):
+        question = current["question"]
+        assert question["number"] == number
+        assert {"number", "text", "direction", "mode", "choices"} == question.keys()
+        assert current["result"] is None
+        submission = {"questionNumber": number, "skip": True}
+        if number == 2:
+            owner.request(resource + "/answers", 400, "POST",
+                          {"questionNumber": number, "text": "\u0000"}, str(uuid.uuid4()))
+            assert owner.request(resource)["test"] == current
+            prefix = "en-" if question["direction"] == "PolishToEnglish" else "pl-"
+            submission = {"questionNumber": number, "text": prefix + question["text"][3:]}
+        response = owner.request(resource + "/answers", 200, "POST",
+                                 submission, str(uuid.uuid4()))
+        current = response["test"]
+        assert {"question", "answeredCount", "totalCount", "result"} == current.keys()
+        assert current["answeredCount"] == number
+    assert current == {"question": None, "answeredCount": 20, "totalCount": 20, "result": "A1"}
+    assert owner.request(resource)["test"] == current
+    owner.request(resource + "/answers", 409, "POST", {"questionNumber": 21, "skip": True}, str(uuid.uuid4()))
+
+
 def stop(server):
     server.terminate()
     server.wait(timeout=10)
@@ -127,9 +190,11 @@ def run(dotnet):
                 owner.request(resource + "/answers", 422, "POST", answer(first), key)
                 owner.request(resource + "/answers", 409, "POST", submission, str(uuid.uuid4()))
 
+                placement = start_placement(owner, other, anonymous)
                 stop(server)
                 server = subprocess.Popen(command, env=env, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
                 wait_ready(server, base)
+                finish_placement(owner, *placement)
                 assert owner.request(resource) == accepted["session"]
                 assert owner.request(resource + "/answers", 200, "POST", submission, key) == accepted
 
@@ -162,7 +227,7 @@ def run(dotnet):
             finally:
                 stop(server)
 
-    print("PostgreSQL learning integration passed: authorization, restart, duplicate submission, completion and partial progress.")
+    print("PostgreSQL learning and placement integration passed: authorization, restart, duplicate submission, completion and partial progress.")
 
 
 if __name__ == "__main__":
