@@ -1,0 +1,109 @@
+id	level	group	english	polish	english_inflections	polish_inflections	polish_alternatives	english_alternatives	english_hint	polish_hint
+a1-01	A1	a1-01	house	dom	houses	domy	-	-	-	-
+a1-02	A1	a1-01	dog	pies	dogs	psy	-	-	-	-
+a1-03	A1	a1-01	bread	chleb	-	chleby	-	-	-	-
+a1-04	A1	a1-01	sun	słońce	suns	słońca	-	-	-	-
+a1-05	A1	a1-02	window	okno	windows	okna	-	-	-	-
+a1-06	A1	a1-02	apple	jabłko	apples	jabłka	-	-	-	-
+a1-07	A1	a1-02	shoe	but	shoes	buty	-	-	-	-
+a1-08	A1	a1-02	river	rzeka	rivers	rzeki	-	-	-	-
+a1-09	A1	a1-03	chair	krzesło	chairs	krzesła	-	-	-	-
+a1-10	A1	a1-03	milk	mleko	-	-	-	-	-	-
+a1-11	A1	a1-03	book	książka	books	książki	-	-	printed work	-
+a1-12	A1	a1-03	tree	drzewo	trees	drzewa	-	-	-	-
+a1-13	A1	a1-04	door	drzwi	doors	-	-	-	-	-
+a1-14	A1	a1-04	egg	jajko	eggs	jajka	-	-	-	-
+a1-15	A1	a1-04	fish	ryba	fishes	ryby	-	-	animal	-
+a1-16	A1	a1-04	hand	ręka	hands	ręce	-	-	-	-
+a1-17	A1	a1-05	to sleep	spać	sleeps|slept	-	-	-	-	-
+a1-18	A1	a1-05	to run	biegać	runs|ran	-	biec	-	on foot	-
+a1-19	A1	a1-05	to read	czytać	reads|reading	-	-	-	-	-
+a1-20	A1	a1-05	to swim	pływać	swims|swam	-	-	-	-	-
+a1-21	A1	a1-06	cold	zimny	-	-	chłodny	-	temperature	-
+a1-22	A1	a1-06	long	długi	-	-	-	-	-	-
+a1-23	A1	a1-06	young	młody	-	-	-	-	-	-
+a1-24	A1	a1-06	dirty	brudny	-	-	-	-	-	-
+a2-01	A2	a2-01	airport	lotnisko	airports	lotniska	-	-	-	-
+a2-02	A2	a2-01	dictionary	słownik	dictionaries	słowniki	-	-	-	-
+a2-03	A2	a2-01	bridge	most	bridges	mosty	-	-	over a river or road	-
+a2-04	A2	a2-01	forest	las	forests	lasy	-	-	-	-
+a2-05	A2	a2-02	ticket	bilet	tickets	bilety	-	-	-	-
+a2-06	A2	a2-02	umbrella	parasol	umbrellas	parasole	-	-	-	-
+a2-07	A2	a2-02	garden	ogród	gardens	ogrody	-	-	-	-
+a2-08	A2	a2-02	museum	muzeum	museums	muzea	-	-	-	-
+a2-09	A2	a2-03	teacher	nauczyciel	teachers	nauczyciele	-	-	-	-
+a2-10	A2	a2-03	neighbor	sąsiad	neighbors	sąsiedzi	-	-	-	-
+a2-11	A2	a2-03	dentist	dentysta	dentists	dentyści	-	-	-	-
+a2-12	A2	a2-03	pilot	pilot samolotu	pilots	piloci samolotu	pilot	-	aircraft	-
+a2-13	A2	a2-04	comfortable	wygodny	-	-	-	-	-	-
+a2-14	A2	a2-04	dangerous	niebezpieczny	-	-	-	-	-	-
+a2-15	A2	a2-04	quiet	cichy	-	-	-	-	low sound	-
+a2-16	A2	a2-04	expensive	drogi	-	-	-	-	-	-
+a2-17	A2	a2-05	to borrow	pożyczać od kogoś	borrows|borrowed	-	-	-	-	-
+a2-18	A2	a2-05	to repair	naprawiać	repairs|repaired	-	-	-	-	-
+a2-19	A2	a2-05	to invite	zapraszać	invites|invited	-	-	-	-	-
+a2-20	A2	a2-05	to pack	pakować	packs|packed	-	-	-	-	-
+b1-01	B1	b1-01	appointment	umówione spotkanie	appointments	-	-	-	-	-
+b1-02	B1	b1-01	baggage	bagaż	-	-	-	-	-	-
+b1-03	B1	b1-01	receipt	paragon	receipts	paragony	-	-	proof of purchase	-
+b1-04	B1	b1-01	warning	ostrzeżenie	warnings	ostrzeżenia	-	-	-	-
+b1-05	B1	b1-02	to recommend	polecać	recommends|recommended	-	-	-	-	-
+b1-06	B1	b1-02	to promise	obiecywać	promises|promised	-	-	-	-	-
+b1-07	B1	b1-02	to complain	skarżyć się	complains|complained	-	-	-	-	-
+b1-08	B1	b1-02	to avoid	unikać	avoids|avoided	-	-	-	-	-
+b1-09	B1	b1-03	reliable	niezawodny	-	-	-	-	-	-
+b1-10	B1	b1-03	crowded	zatłoczony	-	-	-	-	-	-
+b1-11	B1	b1-03	ordinary	zwyczajny	-	-	-	-	-	-
+b1-12	B1	b1-03	polite	uprzejmy	-	-	-	-	-	-
+b1-13	B1	b1-04	improvement	poprawa	improvements	-	-	-	-	-
+b1-14	B1	b1-04	advice	porada	-	-	rada	-	-	-
+b1-15	B1	b1-04	salary	wynagrodzenie	salaries	-	-	pay	-	-
+b1-16	B1	b1-04	failure	niepowodzenie	failures	niepowodzenia	-	-	-	-
+b2-01	B2	b2-01	deadline	termin wykonania	deadlines	-	-	-	-	-
+b2-02	B2	b2-01	shortage	niedobór	shortages	niedobory	-	-	-	-
+b2-03	B2	b2-01	obstacle	przeszkoda	obstacles	przeszkody	-	-	-	-
+b2-04	B2	b2-01	assumption	założenie	assumptions	założenia	-	-	-	-
+b2-05	B2	b2-02	to acknowledge	przyznawać	acknowledges|acknowledged	-	-	-	admit	-
+b2-06	B2	b2-02	to assess	oceniać	assesses|assessed	-	-	-	-	-
+b2-07	B2	b2-02	to acquire	nabywać	acquires|acquired	-	-	-	-	-
+b2-08	B2	b2-02	to enforce	egzekwować	enforces|enforced	-	-	-	a rule or law	-
+b2-09	B2	b2-03	consistent	spójny	-	-	-	-	coherent	-
+b2-10	B2	b2-03	reluctant	niechętny	-	-	-	-	-	-
+b2-11	B2	b2-03	widespread	powszechny	-	-	-	-	-	-
+b2-12	B2	b2-03	fragile	kruchy	-	-	delikatny	-	breaks easily	-
+b2-13	B2	b2-04	drawback	wada	drawbacks	wady	-	disadvantage	-	-
+b2-14	B2	b2-04	incentive	zachęta	incentives	zachęty	-	-	-	-
+b2-15	B2	b2-04	outcome	rezultat	outcomes	rezultaty	-	result	-	-
+b2-16	B2	b2-04	ownership	własność	-	-	-	-	legal possession	-
+c1-01	C1	c1-01	ambiguity	niejednoznaczność	ambiguities	-	-	-	-	-
+c1-02	C1	c1-01	constraint	ograniczenie	constraints	ograniczenia	-	-	-	-
+c1-03	C1	c1-01	discrepancy	rozbieżność	discrepancies	rozbieżności	-	-	-	-
+c1-04	C1	c1-01	rationale	uzasadnienie	rationales	uzasadnienia	-	-	-	-
+c1-05	C1	c1-02	to undermine	podważać	undermines|undermined	-	-	-	-	-
+c1-06	C1	c1-02	to mitigate	łagodzić	mitigates|mitigated	-	-	-	reduce harm	zmniejszać dotkliwość
+c1-07	C1	c1-02	to substantiate	popierać dowodami	substantiates|substantiated	-	-	-	with evidence	-
+c1-08	C1	c1-02	to anticipate	przewidywać	anticipates|anticipated	-	-	-	-	-
+c1-09	C1	c1-03	arbitrary	arbitralny	-	-	-	-	-	-
+c1-10	C1	c1-03	cumbersome	nieporęczny	-	-	-	-	-	-
+c1-11	C1	c1-03	inadvertent	nieumyślny	-	-	-	-	-	-
+c1-12	C1	c1-03	meticulous	skrupulatny	-	-	drobiazgowy	-	-	-
+c1-13	C1	c1-04	liability	odpowiedzialność prawna	liabilities	-	-	-	legal responsibility	-
+c1-14	C1	c1-04	resilience	odporność psychiczna	-	-	-	-	-	-
+c1-15	C1	c1-04	threshold	próg	thresholds	progi	-	-	limit or cutoff	wartość graniczna
+c1-16	C1	c1-04	prevalence	rozpowszechnienie	-	-	-	-	-	-
+c2-01	C2	c2-01	acquiescence	milcząca zgoda	-	-	-	-	-	-
+c2-02	C2	c2-01	cajolery	pochlebcza namowa	-	-	-	-	-	-
+c2-03	C2	c2-01	recalcitrance	krnąbrność	-	-	-	-	-	-
+c2-04	C2	c2-01	sagacity	przenikliwość	-	-	-	-	-	-
+c2-05	C2	c2-02	to abrogate	uchylać przepis	abrogates|abrogated	-	-	-	a law or rule	-
+c2-06	C2	c2-02	to excoriate	ostro krytykować	excoriates|excoriated	-	-	-	-	-
+c2-07	C2	c2-02	to inveigle	zwabiać podstępem	inveigles|inveigled	-	-	-	-	-
+c2-08	C2	c2-02	to ossify	kostnieć	ossifies|ossified	-	-	-	become bone	-
+c2-09	C2	c2-03	ineffable	niewysłowiony	-	-	-	-	-	-
+c2-10	C2	c2-03	lugubrious	posępny	-	-	-	-	-	-
+c2-11	C2	c2-03	perfunctory	pobieżny	-	-	-	-	-	-
+c2-12	C2	c2-03	ubiquitous	wszechobecny	-	-	-	-	-	-
+c2-13	C2	c2-04	bowdlerization	usuwanie gorszących fragmentów	-	-	-	-	-	-
+c2-14	C2	c2-04	ephemerality	ulotność	-	-	-	-	-	-
+c2-15	C2	c2-04	obfuscation	zaciemnianie sensu	-	-	-	-	-	-
+c2-16	C2	c2-04	soliloquy	monolog sceniczny	soliloquies	monologi sceniczne	-	-	a character speaking alone	-
