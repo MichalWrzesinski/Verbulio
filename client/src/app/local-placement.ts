@@ -68,9 +68,7 @@ export class LocalPlacement {
 
   protected load(): void {
     void this.run(async () => {
-      await firstValueFrom(this.http.post('/api/v1/local-learning/identity', null, options));
-      const current = await firstValueFrom(this.http.post<Placement>(endpoint, null, options));
-      this.show(current, true);
+      this.show(await this.currentTest(true), true);
     });
   }
 
@@ -91,9 +89,14 @@ export class LocalPlacement {
           ),
         );
       } catch (error) {
-        if (!(error instanceof HttpErrorResponse) || error.status !== 404) throw error;
+        if (!(error instanceof HttpErrorResponse)) throw error;
+        if (error.status === 401) {
+          await this.restoreExpiredSession();
+          return;
+        }
+        if (error.status !== 404) throw error;
 
-        this.show(await firstValueFrom(this.http.post<Placement>(endpoint, null, options)), true);
+        this.show(await this.currentTest(), true);
         this.message.set('Test został już rozpoczęty od nowa w innej karcie.');
       }
     });
@@ -133,16 +136,14 @@ export class LocalPlacement {
         this.retryAvailable.set(true);
         if (error instanceof HttpErrorResponse) {
           if (error.status === 401) {
-            await firstValueFrom(this.http.post('/api/v1/local-learning/identity', null, options));
-            this.show(await firstValueFrom(this.http.post<Placement>(endpoint, null, options)));
-            this.message.set('Poprzednia sesja wygasła. Przygotowano nowy test.');
+            await this.restoreExpiredSession();
             return;
           }
           if (
             error.status === 404 ||
             (error.status === 409 && error.error?.code === 'answer_conflict')
           ) {
-            this.show(await firstValueFrom(this.http.post<Placement>(endpoint, null, options)));
+            this.show(await this.currentTest());
             this.message.set('Wyświetlono bieżące pytanie po zmianie w innej karcie.');
             return;
           }
@@ -156,12 +157,29 @@ export class LocalPlacement {
     });
   }
 
+  private async currentTest(renewIdentity = false): Promise<Placement> {
+    if (renewIdentity) {
+      await firstValueFrom(this.http.post('/api/v1/local-learning/identity', null, options));
+    }
+    return await firstValueFrom(this.http.post<Placement>(endpoint, null, options));
+  }
+
+  private async restoreExpiredSession(): Promise<void> {
+    this.show(await this.currentTest(true));
+    this.message.set('Poprzednia sesja wygasła. Przygotowano nowy test.');
+  }
+
   private show(placement: Placement, offerResume = false): void {
     this.pending = null;
     this.retryAvailable.set(false);
     this.typed.set('');
-    const openedBefore = sessionStorage.getItem(openedTestKey) === placement.id;
-    sessionStorage.setItem(openedTestKey, placement.id);
+    let openedBefore = false;
+    try {
+      openedBefore = sessionStorage.getItem(openedTestKey) === placement.id;
+      sessionStorage.setItem(openedTestKey, placement.id);
+    } catch {
+      // The server still owns the test when browser storage is unavailable.
+    }
     this.placement.set(placement);
     this.resumePrompt.set(
       offerResume &&

@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { vi } from 'vitest';
 import { routes } from './app.routes';
 
 describe('Public navigation', () => {
@@ -40,12 +41,15 @@ describe('Public navigation', () => {
         },
       },
     });
-    await Promise.resolve();
-    harness.detectChanges();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(harness.routeNativeElement?.querySelector('#q-word')?.textContent?.trim()).toBe(
+        'window',
+      );
+    });
 
     const test = harness.routeNativeElement;
     expect(test?.querySelector('h1')?.textContent).toBe('Test poziomu');
-    expect(test?.querySelector('#q-word')?.textContent?.trim()).toBe('window');
     expect(test?.querySelectorAll('button.tag')).toHaveLength(4);
     expect(test?.querySelector('.result')).toBeNull();
   });

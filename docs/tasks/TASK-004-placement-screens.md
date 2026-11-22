@@ -16,7 +16,9 @@ Exercise CP-001 from landing through the displayed placement result in Angular w
 
 ## Verification
 
-CP-001, local browser segment. Angular development and production builds and the navigation test passed. Chrome checked the choice, typed, resume and result layouts at 320, 375 and 1280 px without horizontal overflow. The keyboard scenario submitted a choice and a typed response, skipped questions, completed all 20, and confirmed the saved result after refresh. It also checked resume before and after the first answer, explicit restart, retry after a response lost after server commit, and recovery after a competing tab advanced the test.
+CP-001, local browser segment. Angular development and production builds and the navigation test passed. Chrome checked the choice, typed, resume and result layouts at 320, 375 and 1280 px without horizontal overflow. The keyboard scenario submitted a choice and a typed response, skipped questions, completed all 20, and confirmed the saved result after refresh. It also checked resume before and after the first answer, explicit restart, retry after a response lost after server commit, recovery after a competing tab advanced the test, and starting a new test after the fixture cookie expired.
+
+Side-by-side comparison at 375 and 1280 px used J-1 views 02, 03, 05 and 06. The same comic frame, portrait, controls, progress and centered resume/result panels are used. Visible differences are the fixture notice, the static reference's prefilled answer, live progress, fixture result wording and keyboard focus rings. Chrome captured no application console warnings or unexpected response statuses. Axe-core 4.10.3 reported zero violations for the WCAG A/AA tags checked on these four screens. Keyboard operation was exercised manually by scripted key events. A full assistive-technology audit is pending.
 
 ## Report
 

@@ -96,6 +96,7 @@
             <label class="fld-l" for="answer">Tłumaczenie</label>
             <div class="inp-box">
               <input
+                #answerInput
                 class="key inp"
                 id="answer"
                 [attr.lang]="target"
@@ -106,7 +107,7 @@
                 enterkeyhint="done"
                 maxlength="256"
                 [readOnly]="busy() || retryAvailable()"
-                (input)="typed.set($any($event.target).value)"
+                (input)="typed.set(answerInput.value)"
               />
             </div>
           </div>
