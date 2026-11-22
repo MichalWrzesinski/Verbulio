@@ -9,3 +9,7 @@ dialog.dialog:not([open]) {
 dialog::backdrop {
   background: var(--backdrop);
 }
+
+.row {
+  width: 100%;
+}

@@ -43,6 +43,9 @@
     </header>
     <main #main class="s-main" id="tresc" tabindex="-1">
       <h1 class="sr">Sesja nauki</h1>
+      @if (session()?.categoryTitle; as title) {
+        <p class="badge s-cat">{{ title }}</p>
+      }
       <div class="s-stage">
         <div class="word-box comic-stage comic-stage--medium">
           <img class="comic-portrait" src="assets/comic/medium.webp" alt="" />
@@ -200,10 +203,129 @@
           <p class="lead">Sesja przerwana. Powyżej widzisz wynik częściowy.</p>
         }
       </section>
-      @if (accountOwned) {
+      @if (session.categoryTitle; as title) {
+        <div class="msg">
+          <p class="msg-h">Kategoria „{{ title }}”</p>
+          @if (session.summary.completed && session.summary.wordCount < 10) {
+            <p>To wszystkie słówka dostępne w tej sesji.</p>
+          }
+        </div>
+      } @else if (accountOwned) {
         <a class="key btn btn--primary" routerLink="/logowanie" (click)="reset()">Gotowe</a>
       } @else {
         <button type="button" class="key btn btn--primary" (click)="reset()">Gotowe</button>
+      }
+    </main>
+    @if (session.categoryTitle) {
+      <div class="actions">
+        <button type="button" class="key btn btn--primary" (click)="reset(); openCategories()">
+          Wybierz kategorię
+        </button>
+        <a class="key btn btn--secondary" routerLink="/logowanie" (click)="reset()">Gotowe</a>
+      </div>
+    }
+  </div>
+} @else if (emptyCategory(); as category) {
+  <div class="app">
+    <header class="form-top">
+      <button type="button" class="link back" [disabled]="busy()" (click)="openCategories()">
+        <svg class="i" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <path
+            d="M12.5 4.5L7 10l5.5 5.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        Kategorie
+      </button>
+    </header>
+    <main #main class="focus-screen" tabindex="-1">
+      <div class="stack">
+        <h1 class="h1">{{ category.title }}</h1>
+        <p class="lead">W tej kategorii nie ma teraz dostępnych słówek.</p>
+        @if (error()) {
+          <p class="fb fb--bad" role="alert">{{ error() }}</p>
+        }
+      </div>
+    </main>
+    <button type="button" class="key btn btn--primary" [disabled]="busy()" (click)="start()">
+      Ćwicz dalej
+    </button>
+  </div>
+} @else if (choosingCategory()) {
+  <div class="app">
+    <header class="form-top">
+      <button type="button" class="link back" [disabled]="busy()" (click)="closeCategories()">
+        <svg class="i" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <path
+            d="M12.5 4.5L7 10l5.5 5.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        Wróć
+      </button>
+    </header>
+    <main class="stack">
+      <div class="stack-s">
+        <h1 #main tabindex="-1" class="h1">Wybierz kategorię</h1>
+        <p class="small">Wybór od razu zaczyna sesję. Liczby pokazują słówka dostępne teraz.</p>
+      </div>
+      @if (error()) {
+        <p class="fb fb--bad" role="alert">{{ error() }}</p>
+        <button
+          type="button"
+          class="key btn btn--secondary"
+          [disabled]="busy()"
+          (click)="openCategories()"
+        >
+          Odśwież kategorie
+        </button>
+      }
+      @if (categories(); as items) {
+        <ul class="rows">
+          @for (category of items; track category.id) {
+            <li>
+              <button
+                type="button"
+                class="key row"
+                [class.is-empty]="category.availableWords === 0"
+                [disabled]="busy()"
+                (click)="start(category)"
+              >
+                <span class="row-t">
+                  <span class="row-n">{{ category.title }}</span>
+                  <span class="row-m">
+                    @if (category.availableWords) {
+                      {{ wordsLabel(category.availableWords)
+                      }}{{ category.availableWords < 10 ? ', krótsza sesja' : '' }}
+                    } @else {
+                      Brak dostępnych słówek
+                    }
+                  </span>
+                </span>
+                <svg class="i" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                  <path
+                    d="M4 10h11M10.5 5l5 5-5 5"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+            </li>
+          }
+        </ul>
+      } @else if (busy()) {
+        <p role="status">Wczytuję kategorie…</p>
       }
     </main>
   </div>
@@ -224,6 +346,11 @@
           <button type="button" class="key btn btn--primary" [disabled]="busy()" (click)="start()">
             Ćwicz dalej
           </button>
+          @if (accountOwned) {
+            <button type="button" class="link" [disabled]="busy()" (click)="openCategories()">
+              Wybierz kategorię
+            </button>
+          }
         </div>
         @if (error()) {
           <p class="fb fb--bad" role="alert">{{ error() }}</p>
