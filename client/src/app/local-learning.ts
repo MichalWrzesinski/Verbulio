@@ -223,6 +223,16 @@ export class LocalLearning {
           this.pendingAttempt = null;
           this.canRetry.set(false);
           this.selected.set(null);
+          if (error.status === 409 && error.error?.code === 'answer_conflict') {
+            const current = await firstValueFrom(
+              this.http.get<Session>(`${api}/sessions/${session.id}`),
+            );
+            this.session.set(current);
+            this.typed.set('');
+            this.error.set('Pytanie zmieniło się w innej karcie. Sesja została odświeżona.');
+            this.focusMain();
+            return;
+          }
         } else {
           this.canRetry.set(true);
         }
