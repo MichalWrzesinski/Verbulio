@@ -53,4 +53,13 @@ describe('Public navigation', () => {
     expect(test?.querySelectorAll('button.tag')).toHaveLength(4);
     expect(test?.querySelector('.result')).toBeNull();
   });
+
+  it('keeps credential fields off the HTTP development login page', async () => {
+    const harness = await RouterTestingHarness.create('/logowanie');
+    const page = harness.routeNativeElement;
+
+    expect(page?.querySelector('h1')?.textContent).toBe('Zaloguj się');
+    expect(page?.textContent).toContain('przez HTTPS');
+    expect(page?.querySelector('form')).toBeNull();
+  });
 });

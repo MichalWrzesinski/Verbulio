@@ -21,7 +21,7 @@
     @if (account()) {
       <h1 #heading class="h1" tabindex="-1">Konto zostało utworzone</h1>
       <p class="lead">Zapisany poziom początkowy to {{ account()?.startingLevel }}.</p>
-      <a class="link" routerLink="/">Wróć na stronę startową</a>
+      <a class="key btn btn--primary" routerLink="/logowanie">Zaloguj się</a>
     } @else if (cannotRegister()) {
       <h1 #heading class="h1" tabindex="-1">Najpierw ukończ test</h1>
       <a class="key btn btn--primary" routerLink="/test">Przejdź do testu</a>
