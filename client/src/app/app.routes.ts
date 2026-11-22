@@ -5,6 +5,7 @@ import { PendingPage } from './pending-page';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', component: Landing },
+  ...learningRoutes,
   {
     path: 'test',
     title: 'Test słownictwa · Verbulio',
@@ -29,6 +30,5 @@ export const routes: Routes = [
     component: PendingPage,
     data: { heading: 'Polityka prywatności' },
   },
-  ...learningRoutes,
   { path: '**', redirectTo: '' },
 ];
