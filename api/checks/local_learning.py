@@ -97,15 +97,21 @@ def run(dotnet):
             server = subprocess.Popen(command, env=env, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
             try:
                 wait_ready(server, base)
-                owner, other = Browser(base), Browser(base)
-                owner.request(SESSION, status=401, method="POST")
+                owner, other, anonymous = Browser(base), Browser(base), Browser(base)
+                anonymous.request(SESSION, status=401, method="POST")
                 owner.request(IDENTITY, status=204, method="POST")
                 other.request(IDENTITY, status=204, method="POST")
                 session = owner.request(SESSION, method="POST")
                 resource = f"{SESSION}/{session['id']}"
                 assert owner.request(SESSION, method="POST") == session
-                other.request(resource, status=404)
-                other.request(resource + "/answers", 404, "POST", answer(session["question"]), str(uuid.uuid4()))
+                for browser, denied in [(anonymous, 401), (other, 404)]:
+                    browser.request(resource, status=denied)
+                    browser.request(resource + "/answers", denied, "POST",
+                                    answer(session["question"]), str(uuid.uuid4()))
+                    browser.request(resource + "/end", denied, "POST")
+                owner.request(resource + "/answers", 400, "POST",
+                              {**answer(session["question"]), "unexpected": True}, str(uuid.uuid4()))
+                assert owner.request(resource) == session
 
                 first = session["question"]
                 submission = answer(first, correct=False)

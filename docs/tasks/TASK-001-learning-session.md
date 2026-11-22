@@ -17,9 +17,9 @@ Deliver one repeatable learning session through Angular, the ASP.NET Core API an
 ## Verification
 
 - 35 .NET tests passed. They cover spelling, inflection and Leitner transitions, return timing, direction, result counting and duplicate submissions.
-- PostgreSQL 18 integration passed with two identities, concurrent repeated submissions, process restart, full completion and saved partial progress.
+- PostgreSQL 18 integration checks read, answer and end denials for anonymous and cross-owner requests. It also checks strict answer shapes, no changes after rejected writes, concurrent repeats, restart, completion and partial progress.
 - Development and production Angular builds and the public navigation test passed. The production build excludes the fixture route and its lazy component.
-- Chrome verified the panel at 320, 375 and 1280 px. The keyboard flow covered a wrong choice, refresh of its feedback, refresh of the next question, dismissal of the interruption dialog and a 2-of-3 summary. Making a word due in the isolated database exercised typed input and a base-form retry through the UI.
+- Chrome verified the panel at 320, 375 and 1280 px. The keyboard flow covered a wrong choice, refresh of its feedback, refresh of the next question, dismissal of the interruption dialog and a 2-of-3 summary. Making a word due in the isolated database exercises typed spelling correction and a base-form retry through the UI. A stale tab refreshes its current question on conflict.
 
 ## Report
 
