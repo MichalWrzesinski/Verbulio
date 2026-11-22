@@ -7,3 +7,5 @@ The owner-approved stack is ASP.NET Core / C#, Angular / TypeScript and PostgreS
 Use a modular monolith with server-owned placement results, sessions, review scheduling and authorization. API declarations in the backend will generate OpenAPI. Operator-only dictionary import runs separately from the web process. Public and portfolio traffic uses one application and one account model.
 
 Before staging, confirm PostgreSQL persistence, a restore drill, scheduled retention and an approved transactional email transport. Use local capture for email development. Hosting, email delivery to real addresses and publication have separate prerequisites.
+
+The learning slice uses .NET SDK 10.0.404, Npgsql and PostgreSQL 18 for local development and integration checks. Development cookie identities and their local data protection keys are isolated from the future account module.
