@@ -24,7 +24,8 @@
       @if (error()) {
         <p class="fb fb--bad" role="alert">{{ error() }}</p>
       }
-      <button type="button" class="key btn btn--primary" [disabled]="busy()" (click)="logout()">
+      <a class="key btn btn--primary" routerLink="/nauka">Ćwicz dalej</a>
+      <button type="button" class="key btn btn--secondary" [disabled]="busy()" (click)="logout()">
         {{ busy() ? 'Wylogowuję…' : 'Wyloguj się' }}
       </button>
     } @else {

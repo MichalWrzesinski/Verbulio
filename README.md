@@ -77,4 +77,4 @@ NODE_EXTRA_CA_CERTS="$PWD/../api/.local-keys/localhost.pem" npm start -- \
   --proxy-config proxy.https.conf.cjs
 ```
 
-Open [the HTTPS development site](https://localhost:4300/) and use “Zaloguj się”. The proxy verifies backend TLS and defaults to `https://localhost:5186`. Override the backend URL with `VERBULIO_DEV_API_URL` when running a separate fixture.
+Open [the HTTPS development site](https://localhost:4300/) and use “Zaloguj się”. After sign-in, “Ćwicz dalej” opens account-owned practice. The proxy verifies backend TLS and defaults to `https://localhost:5186`. Override the backend URL with `VERBULIO_DEV_API_URL` when running a separate fixture.

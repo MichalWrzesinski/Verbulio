@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SESSION = "/api/v1/local-learning/sessions"
 IDENTITY = "/api/v1/local-learning/identity"
 REGISTRATION = "/api/v1/local-registration/accounts"
+ACCOUNT_LEARNING = "/api/v1/local-account/learning/sessions"
 ACCOUNT = "/api/v1/local-account"
 TRANSLATIONS = {
     "house": "dom", "dom": "house",
@@ -135,11 +136,7 @@ def finish_placement(owner, resource, first, key):
             owner.request(resource + "/answers", 400, "POST",
                           {"questionNumber": number, "text": "\u0000"}, str(uuid.uuid4()))
             assert owner.request(resource)["test"] == current
-            source, target = ("polish", "english") if question["direction"] == "PolishToEnglish" else ("english", "polish")
-            prompt = question["text"].split(" (", 1)[0]
-            dictionary_file = ROOT / "Verbulio.Api/Dictionary/placement-pilot-v1.tsv"
-            with dictionary_file.open(encoding="utf-8", newline="") as entries:
-                expected = next(row[target] for row in csv.DictReader(entries, delimiter="\t") if row[source] == prompt)
+            expected, _ = pilot_translation(question)
             submission = {"questionNumber": number, "text": expected}
         response = owner.request(resource + "/answers", 200, "POST",
                                  submission, str(uuid.uuid4()))
@@ -157,6 +154,22 @@ def registration_data(resource, email):
         "email": email,
         "password": "local fixture password!",
     }
+
+
+def pilot_translation(question):
+    source, target = ("polish", "english") if question["direction"] == "PolishToEnglish" else ("english", "polish")
+    prompt = question["text"].split(" (", 1)[0]
+    dictionary_file = ROOT / "Verbulio.Api/Dictionary/placement-pilot-v1.tsv"
+    with dictionary_file.open(encoding="utf-8", newline="") as entries:
+        item = next(row for row in csv.DictReader(entries, delimiter="\t") if row[source] == prompt)
+    return item[target], item["level"]
+
+
+def pilot_answer(question):
+    expected, _ = pilot_translation(question)
+    if question["mode"] == "Typed":
+        return {"questionNumber": question["number"], "text": expected}
+    return {"questionNumber": question["number"], "choice": question["choices"].index(expected)}
 
 
 def skip_placement(browser, resource):
@@ -210,12 +223,16 @@ def exercise_registration(owner, other, anonymous, resource):
     assert signature(other.request(REGISTRATION, 409, "POST",
                                    registration_data(second_resource, candidate["email"]))) == signature(denied)
     second_resource = f"{tests}/{replacement['id']}"
-    skip_placement(other, second_resource)
+    current = replacement["test"]
+    for _ in range(20):
+        current = other.request(second_resource + "/answers", 200, "POST",
+                                pilot_answer(current["question"]), str(uuid.uuid4()))["test"]
+    assert current["result"] == "C2"
     existing_email = [data, candidate][winner]["email"].upper()
     assert signature(other.request(REGISTRATION, 409, "POST", registration_data(second_resource, existing_email))) == signature(denied)
     second_account = other.request(REGISTRATION, 201, "POST",
                                    registration_data(second_resource, "retry-" + data["email"]))
-    assert second_account["startingLevel"] == "A1"
+    assert second_account["startingLevel"] == "C2"
     assert second_account["id"] != account["id"]
     return [data, candidate][winner]["email"], account, "retry-" + data["email"], second_account
 
@@ -294,6 +311,54 @@ def finish_account_session(browser, login, expected, other, other_email, other_a
     results = [winner.request(ACCOUNT + "/login", (401, 429), "POST", bad_login) for _ in range(13)]
     assert any(result and result["code"] == "login_rate_limited" for result in results)
     assert results[-1] is None
+
+
+def exercise_account_learning(owner, other, anonymous, login, account, other_email, other_account):
+    guest = Browser(owner.base, owner.tls)
+    guest.request(IDENTITY, 204, "POST")
+    guest.request(ACCOUNT_LEARNING, 401, "POST")
+    anonymous.request(ACCOUNT_LEARNING, 401, "POST")
+    first = owner.request(ACCOUNT_LEARNING, method="POST")
+    assert first["summary"]["wordCount"] == 10
+    resource = f"{ACCOUNT_LEARNING}/{first['id']}"
+    submission = pilot_answer(first["question"])
+
+    assert other.request(ACCOUNT + "/login", 200, "POST",
+                         {"email": other_email, "password": login["password"]}) == other_account
+    for browser, denied in [(guest, 401), (anonymous, 401), (other, 404)]:
+        browser.request(resource, denied)
+        browser.request(resource + "/answers", denied, "POST", submission, str(uuid.uuid4()))
+        browser.request(resource + "/end", denied, "POST")
+
+    separate = other.request(ACCOUNT_LEARNING, method="POST")
+    assert separate["id"] != first["id"]
+    assert pilot_translation(separate["question"])[1] == "C2"
+    assert separate["summary"]["wordsResolved"] == 0
+
+    first_word = first["question"]["text"]
+    assert pilot_translation(first["question"])[1] == "A1"
+    result = owner.request(resource + "/answers", 200, "POST", submission, str(uuid.uuid4()))
+    assert result["feedback"]["assessment"]["grade"] == "Correct"
+    current = result["session"]
+    owner.request(ACCOUNT + "/logout", 204, "POST")
+    owner.request(resource, 401)
+    assert owner.request(ACCOUNT + "/login", 200, "POST", login) == account
+    assert owner.request(resource) == current
+    assert owner.request(ACCOUNT_LEARNING, method="POST") == current
+
+    seen = {first_word}
+    while question := current["question"]:
+        assert pilot_translation(question)[1] == "A1"
+        assert question["text"] not in seen
+        seen.add(question["text"])
+        current = owner.request(resource + "/answers", 200, "POST",
+                                pilot_answer(question), str(uuid.uuid4()))["session"]
+    assert len(seen) == 10
+    assert current["summary"] == {"firstTryCorrect": 10, "wordCount": 10, "wordsResolved": 10, "completed": True}
+    follow_up = owner.request(ACCOUNT_LEARNING, method="POST")
+    assert follow_up["id"] != first["id"]
+    assert follow_up["question"]["text"] not in seen
+    assert other.request(f"{ACCOUNT_LEARNING}/{separate['id']}") == separate
 
 
 def stop(server):
@@ -380,6 +445,7 @@ basicConstraints = critical,CA:TRUE
                 finish_placement(owner, *placement)
                 email, account, other_email, other_account = exercise_registration(owner, other, anonymous, placement[0])
                 login = start_account_session(owner, other, anonymous, email, account)
+                exercise_account_learning(owner, other, anonymous, login, account, other_email, other_account)
                 assert owner.request(resource) == accepted["session"]
                 assert owner.request(resource + "/answers", 200, "POST", submission, key) == accepted
 
