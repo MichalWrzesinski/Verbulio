@@ -39,7 +39,7 @@ class Browser:
             urllib.request.HTTPSHandler(context=tls),
         )
 
-    def request(self, path, status=200, method="GET", body=None, key=None):
+    def request(self, path, status=200, method="GET", body=None, key=None, include_cookie_headers=False):
         headers = {"X-Verbulio-Client": "local-learning"}
         data = None
         if key:
@@ -57,7 +57,10 @@ class Browser:
             payload = response.read()
             expected = (status,) if isinstance(status, int) else status
             assert response.status in expected, (path, response.status, payload)
-            return json.loads(payload) if payload else None
+            decoded = json.loads(payload) if payload else None
+            if include_cookie_headers:
+                return decoded, response.headers.get_all("Set-Cookie", [])
+            return decoded
 
 
 def wait_ready(server, base, tls):
@@ -254,13 +257,21 @@ def finish_account_session(browser, login, expected, other, other_email, other_a
     old_cookie = copy_account_cookie(browser)
     contenders = (browser, copy_account_cookie(browser))
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        attempts = [pool.submit(contender.request, ACCOUNT + "/login", (200, 409), "POST", login)
-                    for contender in contenders]
+        attempts = [pool.submit(contender.request, ACCOUNT + "/login", (200, 409), "POST", login,
+                                include_cookie_headers=True) for contender in contenders]
     reports = [attempt.result() for attempt in attempts]
-    assert sum(report == expected for report in reports) == 1
-    assert any(report.get("code") == "session_rotation_conflict" for report in reports)
-    winner = contenders[reports.index(expected)]
+    assert sum(report == expected for report, _ in reports) == 1
+    assert any(report.get("code") == "session_rotation_conflict" and not headers
+               for report, headers in reports)
+    winner_index = next(index for index, (report, _) in enumerate(reports) if report == expected)
+    winner = contenders[winner_index]
+    assert reports[winner_index][1]
     old_cookie.request(ACCOUNT + "/session", 401)
+    _, stale_headers = old_cookie.request(ACCOUNT + "/session/reset", 204, "POST", include_cookie_headers=True)
+    assert stale_headers and not list(old_cookie.cookies)
+    _, active_headers = winner.request(ACCOUNT + "/session/reset", 204, "POST", include_cookie_headers=True)
+    assert not active_headers
+    assert winner.request(ACCOUNT + "/session") == expected
     revoked = copy_account_cookie(winner)
     winner.request(ACCOUNT + "/logout", 204, "POST")
     winner.request(ACCOUNT + "/session", 401)

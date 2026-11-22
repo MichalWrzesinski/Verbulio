@@ -246,8 +246,7 @@ account.MapPost("/login", async (LoginRequest request, HttpContext http, Account
     var session = await store.ReplaceAsync(user.Id, previous, cancellationToken);
     if (session is null)
     {
-        await http.SignOutAsync(accountScheme);
-        return Problem(409, "session_rotation_conflict", "Sesja uległa zmianie. Spróbuj ponownie.");
+        return Problem(409, "session_rotation_conflict", "Sesja uległa zmianie. Sprawdź bieżące logowanie.");
     }
 
     var identity = new ClaimsIdentity([new Claim(AccountSessions.IdClaim, session.Id.ToString())], accountScheme);
@@ -260,6 +259,16 @@ account.MapGet("/session", (ClaimsPrincipal user) =>
     Results.Ok(new RegisteredAccount(Owner(user),
         Enum.Parse<Verbulio.Learning.Placement.VocabularyLevel>(user.FindFirstValue(AccountSessions.LevelClaim)!))))
     .RequireAuthorization(accountOnly);
+
+account.MapPost("/session/reset", async (HttpContext http) =>
+{
+    var current = await http.AuthenticateAsync(accountScheme);
+    if (!current.Succeeded && http.Items[AccountSessions.IdClaim] is Guid)
+    {
+        await http.SignOutAsync(accountScheme);
+    }
+    return Results.NoContent();
+}).AddEndpointFilter(RequireLocalClient);
 
 account.MapPost("/logout", async (HttpContext http, AccountSessions store, CancellationToken cancellationToken) =>
 {
