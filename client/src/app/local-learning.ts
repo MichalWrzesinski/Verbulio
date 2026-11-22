@@ -81,6 +81,7 @@ const clientHeaders = { 'X-Verbulio-Client': 'local-learning' };
 export class LocalLearning {
   private readonly http = inject(HttpClient);
   private readonly injector = inject(Injector);
+  private readonly timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   private readonly destroyRef = inject(DestroyRef);
   protected readonly accountOwned = inject(ActivatedRoute).snapshot.data['accountOwned'] === true;
   private readonly api = this.accountOwned
@@ -174,7 +175,10 @@ export class LocalLearning {
       const session = await firstValueFrom(
         this.http.post<Session>(`${this.api}/sessions`, null, {
           headers: clientHeaders,
-          params: category ? { category: category.id } : {},
+          params: {
+            ...(category ? { category: category.id } : {}),
+            ...(this.accountOwned ? { timeZone: this.timeZone } : {}),
+          },
         }),
       ).catch((error: unknown) => {
         if (
@@ -283,6 +287,7 @@ export class LocalLearning {
             attempt.answer,
             {
               headers: { ...clientHeaders, 'Idempotency-Key': attempt.key },
+              params: this.accountOwned ? { timeZone: this.timeZone } : {},
             },
           ),
         );
