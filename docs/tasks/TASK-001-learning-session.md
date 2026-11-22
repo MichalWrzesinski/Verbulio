@@ -1,6 +1,6 @@
 # TASK-001 Local learning session
 
-Status: IN_PROGRESS
+Status: DONE
 
 ## Goal and scope
 
@@ -23,4 +23,4 @@ Deliver one repeatable learning session through Angular, the ASP.NET Core API an
 
 ## Report
 
-The branch contains local implementation and verification. GitHub Actions and independent integration review are pending. The development browser advances with a manual action after feedback, and retrying an unconfirmed request requires the page to remain open. Real accounts, adaptive placement, offline continuation and staging are outside this increment.
+The branch contains local implementation and verification. GitHub Actions and independent review passed before integration. The development browser advances with a manual action after feedback, and retrying an unconfirmed request requires the page to remain open. Real accounts, adaptive placement, offline continuation and staging are outside this increment.

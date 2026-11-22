@@ -1,6 +1,6 @@
 # TASK-004 Local placement screens
 
-Status: IN_PROGRESS
+Status: DONE
 
 ## Goal
 
