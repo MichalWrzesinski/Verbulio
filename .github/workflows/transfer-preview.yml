@@ -63,9 +63,11 @@ jobs:
           cat > "$ssh_dir/known_hosts" <<'KEY'
           151.240.121.172 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGYTMIG6vPOaHudYMg85u011tS/Shg2OBYDCTgWhBfxH
           KEY
-          sftp -b - -i "$ssh_dir/identity" \
+          sftp -F /dev/null -b - -i "$ssh_dir/identity" \
             -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=10 \
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$ssh_dir/known_hosts" \
+            -o GlobalKnownHostsFile=/dev/null -o VerifyHostKeyDNS=no \
+            -o HostKeyAlgorithms=ssh-ed25519 \
             deploy-verbulio@151.240.121.172 <<EOF_SFTP
           cd incoming
           put $PREVIEW_FILENAME $PREVIEW_FILENAME.part
