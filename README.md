@@ -40,3 +40,6 @@ dotnet run --project Verbulio.Api
 From `client/`, run `npm start -- --host 127.0.0.1 --proxy-config proxy.conf.json` and open [the local learning session](http://127.0.0.1:4200/lokalna-nauka). The Angular route exists only in the development build and the API accepts only local development traffic. Use the same browser to resume the active session. The fixture establishes an isolated cookie identity with three dictionary entries. Use “Dalej” to advance after feedback.
 
 To run the database integration check, set `ConnectionStrings__Learning` to an isolated test database, build the release configuration with `dotnet build Verbulio.Api -c Release`, then run `python3 checks/local_learning.py` from `api/`. The check starts and restarts its own local API.
+
+
+The development landing page also opens the local placement test. The browser can resume or restart the saved test and display its server result after 20 questions. It uses synthetic prompts for now. The production build continues to use the placeholder for `/test`.
