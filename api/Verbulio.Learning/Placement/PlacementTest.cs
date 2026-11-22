@@ -6,6 +6,11 @@ public sealed record PlacementItem(
     TranslationPrompt EnglishToPolish,
     TranslationPrompt PolishToEnglish);
 
+public sealed record PlacementBank(
+    string Version,
+    IReadOnlyList<PlacementItem> Items,
+    IReadOnlyList<string> KnownForms);
+
 public sealed record PlacementSubmission(int QuestionNumber, bool Skip = false, string? Text = null, int? Choice = null);
 
 public sealed record PlacementView(LearningQuestion? Question, int AnsweredCount, int TotalCount, VocabularyLevel? Result);
@@ -25,11 +30,11 @@ public sealed class PlacementTest
     private VocabularyLevel _difficulty = VocabularyLevel.A2;
     private PlacementItem? _currentItem;
 
-    public PlacementTest(IEnumerable<PlacementItem> bank, AnswerEvaluator evaluator, int seed)
+    public PlacementTest(PlacementBank bank, int seed)
     {
         ArgumentNullException.ThrowIfNull(bank);
-        ArgumentNullException.ThrowIfNull(evaluator);
-        var items = bank.ToArray();
+        ArgumentException.ThrowIfNullOrWhiteSpace(bank.Version, nameof(bank));
+        var items = bank.Items.ToArray();
         if (items.Any(item => string.IsNullOrWhiteSpace(item.Id) || !Enum.IsDefined(item.Difficulty))
             || items.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count() != items.Length)
         {
@@ -45,7 +50,8 @@ public sealed class PlacementTest
         }
 
         _random = new Random(seed);
-        _evaluator = evaluator;
+        var bankForms = items.SelectMany(item => FormsIn(item.EnglishToPolish).Concat(FormsIn(item.PolishToEnglish)));
+        _evaluator = new AnswerEvaluator(bank.KnownForms.Concat(bankForms));
         _items = new Dictionary<VocabularyLevel, Queue<PlacementItem>>();
         foreach (var level in Enum.GetValues<VocabularyLevel>())
         {
@@ -152,6 +158,9 @@ public sealed class PlacementTest
         return _evaluator.Assess(submission.Text, prompt.Translations, prompt.InflectedForms,
             question.Direction == TranslationDirection.EnglishToPolish, allowBaseFormRetry: false).IsCorrect;
     }
+
+    private static IEnumerable<string> FormsIn(TranslationPrompt prompt) =>
+        prompt.Translations.Concat(prompt.Distractors).Concat(prompt.InflectedForms).Append(prompt.Text);
 
     private static void ValidateDistinctPrompts(IEnumerable<TranslationPrompt> prompts, string parameter)
     {

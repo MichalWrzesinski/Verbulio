@@ -21,4 +21,4 @@ CP-001. Exercise the engine and synthetic scenarios with .NET tests. The complet
 
 ## Report
 
-The engine and scoring comparison cover synthetic profiles. The guest route, a reviewed vocabulary bank, PostgreSQL persistence and result claims remain separate subsequent increments.
+The 49 .NET tests passed and the API built in Release. The scoring comparison and replay of typed answers use a pinned synthetic bank. The guest route, a reviewed vocabulary bank, PostgreSQL persistence and result claims remain separate subsequent increments.

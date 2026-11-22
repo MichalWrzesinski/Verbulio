@@ -105,6 +105,49 @@ public sealed class PlacementTestTests
     }
 
     [Fact]
+    public void ReplaysTypedDecisionsAndFinalEstimateWithThePinnedDictionary()
+    {
+        const int seed = 86;
+        var probe = MakeTest();
+        var firstAnswer = Submission(Assert.IsType<LearningQuestion>(probe.View.Question), correct: true);
+        probe.Submit(Guid.NewGuid(), firstAnswer);
+        var typedQuestion = Assert.IsType<LearningQuestion>(probe.View.Question);
+        var collision = Submission(typedQuestion, correct: true).Text + "x";
+        var collidingAnswer = new PlacementSubmission(typedQuestion.Number, Text: collision);
+
+        var bank = new PlacementBank("synthetic-v2", Bank, [collision]);
+        var original = new PlacementTest(bank, seed);
+        var replay = new PlacementTest(bank with { Items = Bank.Reverse().ToArray() }, seed);
+        var newer = new PlacementTest(bank with { Version = "synthetic-v3", KnownForms = [] }, seed);
+
+        var firstKey = Guid.NewGuid();
+        var typedKey = Guid.NewGuid();
+        foreach (var test in new[] { original, replay, newer })
+        {
+            test.Submit(firstKey, firstAnswer);
+            test.Submit(typedKey, collidingAnswer);
+        }
+
+        Assert.StartsWith("A2-", ItemId(Assert.IsType<LearningQuestion>(original.View.Question)), StringComparison.Ordinal);
+        Assert.StartsWith("B2-", ItemId(Assert.IsType<LearningQuestion>(newer.View.Question)), StringComparison.Ordinal);
+
+        while (original.View.Question is { } question)
+        {
+            var replayQuestion = Assert.IsType<LearningQuestion>(replay.View.Question);
+            Assert.Equal(question.Number, replayQuestion.Number);
+            Assert.Equal(question.Text, replayQuestion.Text);
+            Assert.Equal(question.Choices, replayQuestion.Choices);
+            var key = Guid.NewGuid();
+            var value = Submission(question, correct: true);
+            original.Submit(key, value);
+            replay.Submit(key, value);
+        }
+
+        Assert.NotNull(original.View.Result);
+        Assert.Equal(original.View, replay.View);
+    }
+
+    [Fact]
     public void SupportsTheLargestAttainableRunAtEitherLevelBoundary()
     {
         int[] minimum = [19, 10, 10, 9, 9, 16];
@@ -133,8 +176,7 @@ public sealed class PlacementTestTests
     }
 
     private static PlacementTest MakeTest(IEnumerable<PlacementItem>? bank = null) =>
-        new(bank ?? Bank, new AnswerEvaluator(Bank.SelectMany(item =>
-            item.EnglishToPolish.Translations.Concat(item.PolishToEnglish.Translations))), seed: 86);
+        new(new PlacementBank("synthetic-v1", bank?.ToArray() ?? Bank, []), seed: 86);
 
     private static string ItemId(LearningQuestion question) => question.Text[3..];
 
