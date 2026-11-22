@@ -18,6 +18,9 @@
     @if (account(); as signedIn) {
       <h1 #heading class="h1" tabindex="-1">Jesteś zalogowany</h1>
       <p class="lead">Twój poziom początkowy to {{ signedIn.startingLevel }}.</p>
+      @if (notice()) {
+        <p class="fb fb--hint" role="status">{{ notice() }}</p>
+      }
       @if (error()) {
         <p class="fb fb--bad" role="alert">{{ error() }}</p>
       }

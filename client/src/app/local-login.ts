@@ -38,6 +38,7 @@ export class LocalLogin {
   protected readonly busy = signal(false);
   protected readonly visible = signal(false);
   protected readonly error = signal('');
+  protected readonly notice = signal('');
   protected readonly rejected = signal(false);
 
   constructor() {
@@ -52,6 +53,7 @@ export class LocalLogin {
     const data = new FormData(form);
     this.busy.set(true);
     this.error.set('');
+    this.notice.set('');
     this.rejected.set(false);
     this.visible.set(false);
     try {
@@ -80,6 +82,9 @@ export class LocalLogin {
           if (account) {
             form.reset();
             this.account.set(account);
+            this.notice.set(
+              'Wyświetlam aktywną sesję tej przeglądarki. Nie udało się potwierdzić tej próby logowania.',
+            );
             this.focusHeading();
             return;
           }
@@ -102,6 +107,7 @@ export class LocalLogin {
     if (this.busy()) return;
     this.busy.set(true);
     this.error.set('');
+    this.notice.set('');
     try {
       await firstValueFrom(this.http.post(`${endpoint}/logout`, null, options));
       this.account.set(null);
