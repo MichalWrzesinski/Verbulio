@@ -1,6 +1,7 @@
 """Exercise the development learning API against an isolated PostgreSQL database."""
 
 import concurrent.futures
+import csv
 import http.cookiejar
 import json
 import os
@@ -124,8 +125,12 @@ def finish_placement(owner, resource, first, key):
             owner.request(resource + "/answers", 400, "POST",
                           {"questionNumber": number, "text": "\u0000"}, str(uuid.uuid4()))
             assert owner.request(resource)["test"] == current
-            prefix = "en-" if question["direction"] == "PolishToEnglish" else "pl-"
-            submission = {"questionNumber": number, "text": prefix + question["text"][3:]}
+            source, target = ("polish", "english") if question["direction"] == "PolishToEnglish" else ("english", "polish")
+            prompt = question["text"].split(" (", 1)[0]
+            dictionary_file = ROOT / "Verbulio.Api/Dictionary/placement-pilot-v1.tsv"
+            with dictionary_file.open(encoding="utf-8", newline="") as entries:
+                expected = next(row[target] for row in csv.DictReader(entries, delimiter="\t") if row[source] == prompt)
+            submission = {"questionNumber": number, "text": expected}
         response = owner.request(resource + "/answers", 200, "POST",
                                  submission, str(uuid.uuid4()))
         current = response["test"]

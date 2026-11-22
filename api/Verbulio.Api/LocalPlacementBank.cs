@@ -5,7 +5,9 @@ namespace Verbulio.Api;
 
 internal static class LocalPlacementBank
 {
-    internal static readonly PlacementBank Instance = new(
+    internal static readonly PlacementBank Current = PilotPlacementBank.Load();
+
+    private static readonly PlacementBank Synthetic = new(
         "synthetic-placement-v1",
         Enum.GetValues<VocabularyLevel>().SelectMany(level =>
             Enumerable.Range(1, PlacementTest.QuestionCount).Select(index =>
@@ -18,4 +20,11 @@ internal static class LocalPlacementBank
                     new TranslationPrompt(polish, null, [english], new HashSet<string>(), ["bridge", "table", "garden"]));
             })).ToArray(),
         []);
+
+    internal static PlacementBank Resolve(string version) => version switch
+    {
+        PilotPlacementBank.Version => Current,
+        "synthetic-placement-v1" => Synthetic,
+        _ => throw new InvalidOperationException("Unsupported placement bank version."),
+    };
 }

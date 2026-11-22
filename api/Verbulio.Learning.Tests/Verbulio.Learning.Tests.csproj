@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../Verbulio.Learning/Verbulio.Learning.csproj" />
+    <ProjectReference Include="../Verbulio.Api/Verbulio.Api.csproj" />
     <Using Include="Xunit" />
   </ItemGroup>
 
