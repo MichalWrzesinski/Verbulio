@@ -118,6 +118,15 @@ export class LocalLearning {
     return `${verb} po ${this.targetLanguage() === 'pl' ? 'polsku' : 'angielsku'}`;
   });
 
+  private get requestHeaders(): Record<string, string> {
+    return this.accountOwned
+      ? {
+          ...clientHeaders,
+          'X-Verbulio-Time-Zone': Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+        }
+      : clientHeaders;
+  }
+
   constructor() {
     const saved = sessionStorage.getItem(this.activeSessionKey);
     if (saved) {
@@ -173,7 +182,7 @@ export class LocalLearning {
       if (this.destroyRef.destroyed) return;
       const session = await firstValueFrom(
         this.http.post<Session>(`${this.api}/sessions`, null, {
-          headers: clientHeaders,
+          headers: this.requestHeaders,
           params: category ? { category: category.id } : {},
         }),
       ).catch((error: unknown) => {
@@ -282,7 +291,7 @@ export class LocalLearning {
             `${this.api}/sessions/${session.id}/answers`,
             attempt.answer,
             {
-              headers: { ...clientHeaders, 'Idempotency-Key': attempt.key },
+              headers: { ...this.requestHeaders, 'Idempotency-Key': attempt.key },
             },
           ),
         );

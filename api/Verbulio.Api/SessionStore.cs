@@ -13,12 +13,12 @@ internal sealed record WordState(string Id, TranslationDirection Direction, Answ
 }
 
 internal sealed record StoredAnswer(Guid Id, LearningAnswer Answer, DateTimeOffset AnsweredAt);
-internal sealed record ProfileProgressView(VocabularyLevel StartingLevel, int NewWords, int LearningWords, int MasteredWords);
+internal sealed record ProfileProgressView(VocabularyLevel StartingLevel, int NewWords, int LearningWords, int MasteredWords, LearningStreak Streak);
 internal sealed record SessionView(Guid Id, LearningQuestion? Question, LearningSummary Summary, string? Category, string? CategoryTitle);
 internal sealed record CategoryView(string Id, string Title, int AvailableWords);
 internal sealed record AnswerView(LearningFeedback Feedback, SessionView Session);
 
-internal sealed record SessionState(int Version, int Seed, WordState[] Words, List<StoredAnswer> Answers, bool Ended, string? Category = null)
+internal sealed record SessionState(int Version, int Seed, WordState[] Words, List<StoredAnswer> Answers, bool Ended, string? Category = null, string? TimeZoneId = null)
 {
     internal LearningSession Reconstitute()
     {
@@ -41,7 +41,7 @@ internal sealed record SessionState(int Version, int Seed, WordState[] Words, Li
 internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider timeProvider)
 {
     internal async Task<SessionView?> StartAsync(Guid owner, VocabularyLevel? startingLevel, LearningCategory? category,
-        CancellationToken cancellationToken)
+        TimeZoneInfo? timeZone, CancellationToken cancellationToken)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
@@ -75,7 +75,7 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
 
         var sessionId = Guid.NewGuid();
         var state = new SessionState(catalog.Version, seed,
-            selected.Select(word => new WordState(word.Id, word.NextDirection, word.NextMode, word.Review)).ToArray(), [], false, category?.Id);
+            selected.Select(word => new WordState(word.Id, word.NextDirection, word.NextMode, word.Review)).ToArray(), [], false, category?.Id, timeZone?.Id);
         await using var insert = new NpgsqlCommand(
             "INSERT INTO learning_sessions (id, owner_id, active, state) VALUES ($1, $2, true, $3)", connection, transaction);
         insert.Parameters.AddWithValue(sessionId);
@@ -87,7 +87,7 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
     }
 
     internal async Task<ProfileProgressView> ProfileProgressAsync(Guid owner, VocabularyLevel startingLevel,
-        CancellationToken cancellationToken)
+        TimeZoneInfo timeZone, CancellationToken cancellationToken)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         var progress = await ReadProgressAsync(owner, connection, null, cancellationToken);
@@ -97,7 +97,17 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
             .ToArray();
         var tracked = levelWords.Where(progress.ContainsKey).ToArray();
         var mastered = tracked.Count(id => progress[id].Review?.Box == ReviewBox.Mastered);
-        return new(startingLevel, levelWords.Length - tracked.Length, tracked.Length - mastered, mastered);
+        var days = new List<DateOnly>();
+        await using var select = new NpgsqlCommand("SELECT credited_day FROM learning_days WHERE owner_id = $1", connection);
+        select.Parameters.AddWithValue(owner);
+        await using var reader = await select.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            days.Add(reader.GetFieldValue<DateOnly>(0));
+        }
+
+        return new(startingLevel, levelWords.Length - tracked.Length, tracked.Length - mastered, mastered,
+            LearningStreak.Calculate(days, LearningStreak.LocalDay(timeProvider.GetUtcNow(), timeZone)));
     }
 
     internal async Task<CategoryView[]> CategoriesAsync(Guid owner, VocabularyLevel startingLevel,
@@ -147,7 +157,7 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
     }
 
     internal async Task<AnswerView?> SubmitAsync(Guid owner, Guid id, Guid key, LearningAnswer answer,
-        CancellationToken cancellationToken)
+        TimeZoneInfo? accountTimeZone, CancellationToken cancellationToken)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
@@ -170,11 +180,32 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
                 await SaveProgressAsync(connection, transaction, owner, progress, cancellationToken);
             }
 
+            if (session.Summary.Completed && accountTimeZone is not null)
+            {
+                var zone = state.TimeZoneId is { } zoneId &&
+                    TimeZoneInfo.TryFindSystemTimeZoneById(zoneId, out var savedZone) ? savedZone : accountTimeZone;
+                await CreditDayAsync(connection, transaction, owner, answeredAt, zone, cancellationToken);
+            }
+
             await SaveAsync(connection, transaction, owner, id, state, session.CurrentQuestion is not null, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
 
         return new AnswerView(feedback, View(id, session, state.Category));
+    }
+
+    private static async Task CreditDayAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid owner,
+        DateTimeOffset completedAt, TimeZoneInfo timeZone, CancellationToken cancellationToken)
+    {
+        await using var credit = new NpgsqlCommand("""
+            INSERT INTO learning_days (owner_id, credited_day, completed_at, time_zone)
+            VALUES ($1, $2, $3, $4) ON CONFLICT (owner_id, credited_day) DO NOTHING
+            """, connection, transaction);
+        credit.Parameters.AddWithValue(owner);
+        credit.Parameters.AddWithValue(LearningStreak.LocalDay(completedAt, timeZone));
+        credit.Parameters.AddWithValue(completedAt);
+        credit.Parameters.AddWithValue(timeZone.Id);
+        await credit.ExecuteNonQueryAsync(cancellationToken);
     }
 
     internal async Task<SessionView?> EndAsync(Guid owner, Guid id, CancellationToken cancellationToken)

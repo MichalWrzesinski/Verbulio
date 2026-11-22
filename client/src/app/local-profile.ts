@@ -16,13 +16,23 @@ interface ProfileProgress {
   newWords: number;
   learningWords: number;
   masteredWords: number;
+  streak: { currentDays: number; bestDays: number };
 }
 
 @Component({
   selector: 'app-local-profile',
   imports: [RouterLink],
   templateUrl: './local-profile.html',
-  styles: ':host { display: contents; }',
+  styles: `
+    :host {
+      display: contents;
+    }
+
+    .streak-value {
+      flex-wrap: wrap;
+      white-space: normal;
+    }
+  `,
 })
 export class LocalProfile {
   private readonly http = inject(HttpClient);
@@ -40,7 +50,11 @@ export class LocalProfile {
   protected load(): void {
     this.state.set('loading');
     this.http
-      .get<ProfileProgress>('/api/v1/local-account/profile')
+      .get<ProfileProgress>('/api/v1/local-account/profile', {
+        headers: {
+          'X-Verbulio-Time-Zone': Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+        },
+      })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (profile) => {
