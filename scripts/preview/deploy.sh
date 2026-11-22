@@ -30,15 +30,15 @@ if [[ ! -f .env ]]; then
   mv .env.tmp .env
   unset password
 fi
-if [[ ! -s tls/preview.key ]] || ! openssl x509 -in tls/preview.crt -noout -checkend 172800 >/dev/null 2>&1; then
+if ! openssl x509 -in tls/preview.crt -noout -checkend 172800 >/dev/null 2>&1 ||
+  ! cmp -s <(openssl x509 -in tls/preview.crt -noout -pubkey 2>/dev/null) \
+    <(openssl pkey -in tls/preview.key -passin pass: -pubout 2>/dev/null); then
   openssl req -x509 -newkey rsa:2048 -nodes -days 90 -subj '/CN=Verbulio private preview' \
     -addext 'subjectAltName=IP:127.0.0.1' -addext 'basicConstraints=critical,CA:FALSE' \
     -keyout tls/preview.key.tmp -out tls/preview.crt.tmp
   mv tls/preview.key.tmp tls/preview.key
   mv tls/preview.crt.tmp tls/preview.crt
-  printf 'Preview certificate renewed. Refresh the trusted copy before viewing.\n'
 fi
-install -m 644 tls/preview.crt preview.crt
 PREVIEW_UID="$(id -u)"
 PREVIEW_GID="$(id -g)"
 export PREVIEW_UID PREVIEW_GID
@@ -54,7 +54,7 @@ compose() {
 healthy() {
   local attempt
   for attempt in {1..30}; do
-    if curl --noproxy '*' --cacert preview.crt --connect-timeout 2 --max-time 3 \
+    if curl --noproxy '*' --cacert tls/preview.crt --connect-timeout 2 --max-time 3 \
       --fail --silent https://127.0.0.1:5443/health > /dev/null; then
       return 0
     fi
@@ -63,10 +63,19 @@ healthy() {
   return 1
 }
 
+publish_certificate() {
+  if ! cmp -s tls/preview.crt preview.crt; then
+    install -m 644 tls/preview.crt preview.crt.tmp
+    mv preview.crt.tmp preview.crt
+    printf 'Preview certificate updated. Refresh the trusted copy before viewing.\n'
+  fi
+}
+
 compose "$release" config --quiet
 compose "$release" up -d --wait db
 compose "$release" run --rm --no-deps app dotnet Verbulio.Api.dll --migrate
 if compose "$release" up -d --no-deps --force-recreate app && healthy; then
+  publish_certificate
   printf '%s\n' "$release" > current-release.tmp
   mv current-release.tmp current-release
   printf 'Preview release %s is healthy.\n' "$revision"
@@ -77,6 +86,7 @@ printf 'Candidate failed its health check.\n' >&2
 if [[ -f current-release ]]; then
   previous="$(cat current-release)"
   if compose "$previous" up -d --no-deps --force-recreate app && healthy; then
+    publish_certificate
     printf 'Restored the preceding healthy app release.\n' >&2
     exit 1
   fi
