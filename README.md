@@ -43,3 +43,38 @@ To run the database integration check, set `ConnectionStrings__Learning` to an i
 
 
 The development landing page also opens the local placement test. The browser can resume or restart the saved test and display its server result after 20 questions. New local tests use the [editorial pilot bank](docs/product/vocabulary.md). The labels are provisional and the result remains marked as test data. After completion, use “Załóż konto” with a test address to create a local account with the saved level. The production build continues to use the placeholder for `/test`.
+
+## Local account login over HTTPS
+
+The HTTP setup above supports the test and registration fixture. To exercise browser login, use a trusted localhost development certificate for both the API and Angular. [Certificate tooling](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-dev-certs).
+
+With the local database running, prepare the certificate once from the repository root:
+
+```sh
+umask 077
+mkdir -p api/.local-keys
+dotnet dev-certs https --trust
+dotnet dev-certs https --export-path "$PWD/api/.local-keys/localhost.pem" --format PEM --no-password
+```
+
+From `api/`, use the same local `ConnectionStrings__Learning` from the HTTP setup and run:
+
+```sh
+export ASPNETCORE_ENVIRONMENT=Development
+export ASPNETCORE_URLS=https://localhost:5186
+export ASPNETCORE_Kestrel__Certificates__Default__Path="$PWD/.local-keys/localhost.pem"
+export ASPNETCORE_Kestrel__Certificates__Default__KeyPath="$PWD/.local-keys/localhost.key"
+dotnet run --project Verbulio.Api -- --migrate
+dotnet run --project Verbulio.Api
+```
+
+From `client/`, after installing dependencies:
+
+```sh
+NODE_EXTRA_CA_CERTS="$PWD/../api/.local-keys/localhost.pem" npm start -- \
+  --host localhost --port 4300 --ssl \
+  --ssl-cert ../api/.local-keys/localhost.pem --ssl-key ../api/.local-keys/localhost.key \
+  --proxy-config proxy.https.conf.cjs
+```
+
+Open [the HTTPS development site](https://localhost:4300/) and use “Zaloguj się”. The proxy verifies backend TLS and defaults to `https://localhost:5186`. Override the backend URL with `VERBULIO_DEV_API_URL` when running a separate fixture.
