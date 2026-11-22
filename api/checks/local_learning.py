@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SESSION = "/api/v1/local-learning/sessions"
 IDENTITY = "/api/v1/local-learning/identity"
 REGISTRATION = "/api/v1/local-registration/accounts"
+ACCOUNT = "/api/v1/local-account"
 TRANSLATIONS = {
     "house": "dom", "dom": "house",
     "window": "okno", "okno": "window",
@@ -30,8 +31,9 @@ TRANSLATIONS = {
 class Browser:
     def __init__(self, base):
         self.base = base
+        self.cookies = http.cookiejar.CookieJar()
         self.client = urllib.request.build_opener(
-            urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
+            urllib.request.HTTPCookieProcessor(self.cookies)
         )
 
     def request(self, path, status=200, method="GET", body=None, key=None):
@@ -209,6 +211,55 @@ def exercise_registration(owner, other, anonymous, resource):
                                    registration_data(second_resource, "retry-" + data["email"]))
     assert second_account["startingLevel"] == "A1"
     assert second_account["id"] != account["id"]
+    return [data, candidate][winner]["email"], account
+
+
+def copy_account_cookie(browser):
+    previous = Browser(browser.base)
+    for cookie in browser.cookies:
+        if cookie.name == "verbulio.local-account":
+            previous.cookies.set_cookie(cookie)
+    return previous
+
+
+def start_account_session(browser, guest, anonymous, email, expected):
+    browser.request(ACCOUNT + "/session", 401)
+    guest.request(ACCOUNT + "/session", 401)
+    anonymous.request(ACCOUNT + "/session", 401)
+    guest.request(ACCOUNT + "/logout", 401, "POST")
+    anonymous.request(ACCOUNT + "/logout", 401, "POST")
+    invalid = {"email": email, "password": "other local fixture password!"}
+    wrong = browser.request(ACCOUNT + "/login", 401, "POST", invalid)
+    unknown = browser.request(ACCOUNT + "/login", 401, "POST", {**invalid, "email": "unknown@example.invalid"})
+    for key in ("code", "title", "status"):
+        assert wrong[key] == unknown[key]
+    login = {"email": email.upper(), "password": "local fixture password!"}
+    assert browser.request(ACCOUNT + "/login", 200, "POST", login) == expected
+    assert browser.request(ACCOUNT + "/session") == expected
+    return login
+
+
+def finish_account_session(browser, login, expected):
+    assert browser.request(ACCOUNT + "/session") == expected
+    old_cookie = copy_account_cookie(browser)
+    assert old_cookie.request(ACCOUNT + "/session") == expected
+    assert browser.request(ACCOUNT + "/login", 200, "POST", login) == expected
+    old_cookie.request(ACCOUNT + "/session", 401)
+    revoked = copy_account_cookie(browser)
+    browser.request(ACCOUNT + "/logout", 204, "POST")
+    browser.request(ACCOUNT + "/session", 401)
+    revoked.request(ACCOUNT + "/session", 401)
+    if expire := os.environ.get("VERBULIO_EXPIRE_TEST_SESSIONS"):
+        assert browser.request(ACCOUNT + "/login", 200, "POST", login) == expected
+        subprocess.run([expire], check=True)
+        browser.request(ACCOUNT + "/session", 401)
+        print("Expired server-side session was denied while its browser cookie was still present.")
+
+    bad_login = {"email": login["email"], "password": "invalid fixture password!"}
+    results = [browser.request(ACCOUNT + "/login", (401, 429), "POST", bad_login) for _ in range(13)]
+    assert any(result and result["code"] == "login_rate_limited" for result in results)
+    assert results[-1] is None
+
 
 
 def stop(server):
@@ -272,7 +323,8 @@ def run(dotnet):
                 unfinished_data = registration_data(placement[0], uuid.uuid4().hex + "@example.invalid")
                 owner.request(REGISTRATION, 409, "POST", unfinished_data)
                 finish_placement(owner, *placement)
-                exercise_registration(owner, other, anonymous, placement[0])
+                email, account = exercise_registration(owner, other, anonymous, placement[0])
+                login = start_account_session(owner, other, anonymous, email, account)
                 assert owner.request(resource) == accepted["session"]
                 assert owner.request(resource + "/answers", 200, "POST", submission, key) == accepted
 
@@ -299,6 +351,11 @@ def run(dotnet):
                 assert not ended["summary"]["completed"]
                 assert other.request(SESSION, method="POST")["summary"]["wordCount"] == 2
 
+                stop(server)
+                server = subprocess.Popen(command, env=env, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+                wait_ready(server, base)
+                finish_account_session(owner, login, account)
+
                 if previous_api := os.environ.get("VERBULIO_PREVIOUS_API_DLL"):
                     stop(server)
                     server = subprocess.Popen([dotnet, previous_api], env=env, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
@@ -314,7 +371,7 @@ def run(dotnet):
             finally:
                 stop(server)
 
-    print("PostgreSQL learning, placement and registration integration passed: authorization, restart, duplicate submission, completion and partial progress.")
+    print("PostgreSQL learning, placement, registration and account-session integration passed: authorization, restart, duplicate submission, completion and partial progress.")
 
 
 if __name__ == "__main__":

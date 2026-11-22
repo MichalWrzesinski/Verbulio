@@ -15,7 +15,7 @@ internal sealed class AccountRegistration
     {
         PlacementTestId = placementTestId;
         Email = email;
-        NormalizedEmail = email.ToUpperInvariant();
+        NormalizedEmail = NormalizeEmail(email);
         Password = password;
     }
 
@@ -23,6 +23,8 @@ internal sealed class AccountRegistration
     internal string Email { get; }
     internal string NormalizedEmail { get; }
     internal string Password { get; }
+
+    internal static string NormalizeEmail(string email) => email.ToUpperInvariant();
 
     internal static AccountRegistration? FromRequest(RegistrationRequest request)
     {

@@ -1,14 +1,19 @@
 using System.Net;
 using System.Security.Claims;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Identity;
 using Npgsql;
 using Verbulio.Api;
 using Verbulio.Learning;
 
+const string accountScheme = "LocalAccount";
+const string loginLimit = "LocalAccountLogin";
 var builder = WebApplication.CreateBuilder(args);
 if (!builder.Environment.IsDevelopment())
 {
@@ -22,6 +27,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<SessionStore>();
 builder.Services.AddSingleton<GuestPlacementStore>();
 builder.Services.AddSingleton<RegistrationStore>();
+builder.Services.AddSingleton<AccountCredentials>();
+builder.Services.AddSingleton<AccountSessions>();
 builder.Services.AddSingleton<IPasswordHasher<RegisteredAccount>, PasswordHasher<RegisteredAccount>>();
 builder.Services.AddProblemDetails();
 builder.Services.AddDataProtection()
@@ -39,8 +46,52 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         return Task.CompletedTask;
     };
+}).AddCookie(accountScheme, options =>
+{
+    options.Cookie.Name = "verbulio.local-account";
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.HttpOnly = true;
+    options.ExpireTimeSpan = AccountSessions.Lifetime;
+    options.SlidingExpiration = false;
+    options.Events.OnRedirectToLogin = context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return Task.CompletedTask;
+    };
+    options.Events.OnValidatePrincipal = async context =>
+    {
+        var store = context.HttpContext.RequestServices.GetRequiredService<AccountSessions>();
+        if (SessionId(context.Principal) is not { } id
+            || await store.ReadAsync(id, context.HttpContext.RequestAborted) is not { } user)
+        {
+            context.RejectPrincipal();
+            return;
+        }
+
+        context.ReplacePrincipal(new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(AccountSessions.IdClaim, id.ToString()),
+             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+             new Claim(AccountSessions.LevelClaim, user.StartingLevel.ToString())], accountScheme)));
+    };
 });
 builder.Services.AddAuthorization();
+builder.Services.AddSingleton(_ => PartitionedRateLimiter.Create<string, string>(email =>
+    RateLimitPartition.GetFixedWindowLimiter(email, _ => new FixedWindowRateLimiterOptions
+    {
+        PermitLimit = 6,
+        Window = TimeSpan.FromMinutes(1),
+    })));
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(loginLimit, context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? string.Empty,
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 12,
+            Window = TimeSpan.FromMinutes(1),
+        }));
+});
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow;
@@ -63,6 +114,7 @@ app.Use(async (context, next) =>
     await next(context);
 });
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapGet("/health", () => TypedResults.Ok());
@@ -155,6 +207,49 @@ app.MapGet("/api/v1/local-registration/outcomes/{placementTestId:guid}", async (
         : Problem(404, "registration_not_found", "Brak zapisanego konta dla tego testu."))
     .RequireAuthorization();
 
+var account = app.MapGroup("/api/v1/local-account");
+var accountOnly = new AuthorizeAttribute { AuthenticationSchemes = accountScheme };
+account.MapPost("/login", async (LoginRequest request, HttpContext http, AccountCredentials credentials,
+    AccountSessions store, PartitionedRateLimiter<string> emailLimiter, CancellationToken cancellationToken) =>
+{
+    var key = request.Email?.Trim() is { Length: > 0 and <= 254 } email
+        ? AccountRegistration.NormalizeEmail(email)
+        : string.Empty;
+    using var attempt = await emailLimiter.AcquireAsync(key, 1, cancellationToken);
+    if (!attempt.IsAcquired)
+    {
+        return Problem(429, "login_rate_limited", "Za dużo prób logowania. Spróbuj ponownie za chwilę.");
+    }
+
+    var user = await credentials.VerifyAsync(request, cancellationToken);
+    if (user is null)
+    {
+        return Problem(401, "invalid_credentials", "Nieprawidłowy e-mail lub hasło.");
+    }
+
+    var existing = await http.AuthenticateAsync(accountScheme);
+    var session = await store.ReplaceAsync(user.Id, SessionId(existing.Principal), cancellationToken);
+    var identity = new ClaimsIdentity([new Claim(AccountSessions.IdClaim, session.Id.ToString())], accountScheme);
+    await http.SignInAsync(accountScheme, new ClaimsPrincipal(identity),
+        new AuthenticationProperties { ExpiresUtc = session.ExpiresAt });
+    return Results.Ok(user);
+}).RequireRateLimiting(loginLimit).AddEndpointFilter(RequireLocalClient);
+
+account.MapGet("/session", (ClaimsPrincipal user) =>
+    Results.Ok(new RegisteredAccount(Owner(user),
+        Enum.Parse<Verbulio.Learning.Placement.VocabularyLevel>(user.FindFirstValue(AccountSessions.LevelClaim)!))))
+    .RequireAuthorization(accountOnly);
+
+account.MapPost("/logout", async (HttpContext http, AccountSessions store, CancellationToken cancellationToken) =>
+{
+    if (SessionId(http.User) is { } id)
+    {
+        await store.RevokeAsync(id, cancellationToken);
+    }
+    await http.SignOutAsync(accountScheme);
+    return Results.NoContent();
+}).RequireAuthorization(accountOnly).AddEndpointFilter(RequireLocalClient);
+
 if (args.Contains("--migrate", StringComparer.Ordinal))
 {
     var dataSource = app.Services.GetRequiredService<NpgsqlDataSource>();
@@ -176,6 +271,9 @@ if (args.Contains("--migrate", StringComparer.Ordinal))
 }
 
 await app.RunAsync();
+
+static Guid? SessionId(ClaimsPrincipal? user) =>
+    Guid.TryParseExact(user?.FindFirstValue(AccountSessions.IdClaim), "D", out var id) ? id : null;
 
 static Guid Owner(ClaimsPrincipal account) => Guid.Parse(account.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
