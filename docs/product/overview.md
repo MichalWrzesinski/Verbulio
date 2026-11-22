@@ -15,7 +15,18 @@ Use a controlled bilingual fixture set and an authenticated test identity to exe
 - The approved queue rule keeps unlimited returns. A wrong word goes after two available questions, after one if only one remains, or immediately if the queue is empty. A completed session still requires a correct answer for every selected word.
 - Streak day boundary. Recommend storing the completion instant and the session's IANA time zone, preserving credited days after travel. A queued final answer should credit the captured completion day only after server acceptance, subject to a bounded clock policy.
 - Duplicate sign-up email. Recommend a neutral registration response plus clear sign-in and reset links, with limits on email activity.
-- Placement. Compare difficulty and result estimators against synthetic profiles before selecting an algorithm. Require all-wrong to produce A1 and all-correct at least C1. Treat the result as an exercise-selection estimate.
+- [Placement scoring and bank requirements](placement.md). The experiment and engine cover synthetic response profiles. The guest flow and content validation are tracked separately.
 - Dictionary. Check the rights and coverage of candidate sources before adapting 100–200 representative records. Keep provenance per entry and keep OpenAI out of user requests.
 
 The owner-approved MVP checkout conditions cover full account and retention flows, interrupted connectivity, ownership enforcement, accessible responsive UI, operator import and a verified staging candidate. Educational effectiveness remains to be evaluated.
+
+
+## Critical paths
+
+| ID | Flow and actors | Why it is critical |
+| --- | --- | --- |
+| CP-001 | Guest starts or resumes placement, finishes 20 questions, creates an account and starts learning. [Placement](placement.md) | A new user needs an attainable starting point and an account linked to the server-owned result. |
+| CP-002 | Account holder starts a session, answers and resumes, completes or ends early, then returns for due words. [Learning](learning.md) | Answer loss, duplicate progress or inaccessible practice defeats the daily learning goal. |
+| CP-003 | Account holder confirms or recovers access and requests their own account data or deletion. | Access recovery, privacy and cross-account isolation protect personal data and saved progress. |
+
+See the [verification plan](../qa/critical-paths.md).
