@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Identity;
 using Npgsql;
 using Verbulio.Api;
 using Verbulio.Learning;
+using Verbulio.Learning.Placement;
 
 const string accountScheme = "LocalAccount";
 const string loginLimit = "LocalAccountLogin";
@@ -139,57 +140,7 @@ learning.MapPost("/identity", async (HttpContext http) =>
     return TypedResults.NoContent();
 }).AddEndpointFilter(RequireLocalClient);
 
-var sessions = learning.MapGroup("/sessions").RequireAuthorization();
-sessions.MapPost("", async (ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
-{
-    var session = await store.StartAsync(Owner(user), cancellationToken);
-    return session is null
-        ? Problem(409, "no_words_available", "Brak słówek do powtórki.")
-        : Results.Ok(session);
-}).AddEndpointFilter(RequireLocalClient);
-
-sessions.MapGet("/{id:guid}", async (Guid id, ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
-    await store.ReadAsync(Owner(user), id, cancellationToken) is { } session
-        ? Results.Ok(session)
-        : Problem(404, "session_not_found", "Nie znaleziono sesji."));
-
-sessions.MapPost("/{id:guid}/answers", async (Guid id, LearningAnswer answer, HttpContext http, SessionStore store,
-    CancellationToken cancellationToken) =>
-{
-    if (!Guid.TryParse(http.Request.Headers["Idempotency-Key"].ToString(), out var key) || key == Guid.Empty)
-    {
-        return Problem(400, "invalid_submission_key", "Brakuje identyfikatora odpowiedzi.");
-    }
-
-    if (answer.Text?.Length > 256)
-    {
-        return Problem(400, "invalid_answer", "Odpowiedź jest za długa.");
-    }
-
-    try
-    {
-        return await store.SubmitAsync(Owner(http.User), id, key, answer, cancellationToken) is { } result
-            ? Results.Ok(result)
-            : Problem(404, "session_not_found", "Nie znaleziono sesji.");
-    }
-    catch (ArgumentException)
-    {
-        return Problem(400, "invalid_answer", "Podaj odpowiedź w wymaganym formacie.");
-    }
-    catch (LearningConflictException conflict) when (conflict.Reason == LearningConflict.ReusedSubmission)
-    {
-        return Problem(422, "reused_submission_key", "Ta odpowiedź ma już inny zapis.");
-    }
-    catch (LearningConflictException)
-    {
-        return Problem(409, "answer_conflict", "Odśwież sesję przed wysłaniem odpowiedzi.");
-    }
-}).AddEndpointFilter(RequireLocalClient);
-
-sessions.MapPost("/{id:guid}/end", async (Guid id, ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
-    await store.EndAsync(Owner(user), id, cancellationToken) is { } session
-        ? Results.Ok(session)
-        : Problem(404, "session_not_found", "Nie znaleziono sesji.")).AddEndpointFilter(RequireLocalClient);
+MapLearningSessions(learning.MapGroup("/sessions").RequireAuthorization(), accountOwned: false);
 
 app.MapLocalPlacement();
 
@@ -220,6 +171,7 @@ var account = app.MapGroup("/api/v1/local-account")
         ? next(context)
         : ValueTask.FromResult<object?>(Problem(400, "secure_connection_required", "Wymagane jest połączenie HTTPS.")));
 var accountOnly = new AuthorizeAttribute { AuthenticationSchemes = accountScheme };
+MapLearningSessions(account.MapGroup("/learning/sessions").RequireAuthorization(accountOnly), accountOwned: true);
 account.MapPost("/login", async (LoginRequest request, HttpContext http, AccountCredentials credentials,
     AccountSessions store, PartitionedRateLimiter<string> emailLimiter, ILogger<AccountSessions> logger,
     CancellationToken cancellationToken) =>
@@ -257,7 +209,7 @@ account.MapPost("/login", async (LoginRequest request, HttpContext http, Account
 
 account.MapGet("/session", (ClaimsPrincipal user) =>
     Results.Ok(new RegisteredAccount(Owner(user),
-        Enum.Parse<Verbulio.Learning.Placement.VocabularyLevel>(user.FindFirstValue(AccountSessions.LevelClaim)!))))
+        StartingLevel(user))))
     .RequireAuthorization(accountOnly);
 
 account.MapPost("/session/reset", async (HttpContext http) =>
@@ -304,6 +256,63 @@ await app.RunAsync();
 
 static Guid? SessionId(ClaimsPrincipal? user) =>
     Guid.TryParseExact(user?.FindFirstValue(AccountSessions.IdClaim), "D", out var id) ? id : null;
+
+static VocabularyLevel StartingLevel(ClaimsPrincipal user) =>
+    Enum.Parse<VocabularyLevel>(user.FindFirstValue(AccountSessions.LevelClaim)!);
+
+static void MapLearningSessions(RouteGroupBuilder sessions, bool accountOwned)
+{
+    sessions.MapPost("", async (ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
+    {
+        var session = await store.StartAsync(Owner(user), accountOwned ? StartingLevel(user) : null, cancellationToken);
+        return session is null
+            ? Problem(409, "no_words_available", "Brak słówek do powtórki.")
+            : Results.Ok(session);
+    }).AddEndpointFilter(RequireLocalClient);
+
+    sessions.MapGet("/{id:guid}", async (Guid id, ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
+        await store.ReadAsync(Owner(user), id, cancellationToken) is { } session
+            ? Results.Ok(session)
+            : Problem(404, "session_not_found", "Nie znaleziono sesji."));
+
+    sessions.MapPost("/{id:guid}/answers", async (Guid id, LearningAnswer answer, HttpContext http, SessionStore store,
+        CancellationToken cancellationToken) =>
+    {
+        if (!Guid.TryParse(http.Request.Headers["Idempotency-Key"].ToString(), out var key) || key == Guid.Empty)
+        {
+            return Problem(400, "invalid_submission_key", "Brakuje identyfikatora odpowiedzi.");
+        }
+
+        if (answer.Text is { } text && (text.Length > 256 || text.Contains('\0')))
+        {
+            return Problem(400, "invalid_answer", "Podaj odpowiedź w wymaganym formacie.");
+        }
+
+        try
+        {
+            return await store.SubmitAsync(Owner(http.User), id, key, answer, cancellationToken) is { } result
+                ? Results.Ok(result)
+                : Problem(404, "session_not_found", "Nie znaleziono sesji.");
+        }
+        catch (ArgumentException)
+        {
+            return Problem(400, "invalid_answer", "Podaj odpowiedź w wymaganym formacie.");
+        }
+        catch (LearningConflictException conflict) when (conflict.Reason == LearningConflict.ReusedSubmission)
+        {
+            return Problem(422, "reused_submission_key", "Ta odpowiedź ma już inny zapis.");
+        }
+        catch (LearningConflictException)
+        {
+            return Problem(409, "answer_conflict", "Odśwież sesję przed wysłaniem odpowiedzi.");
+        }
+    }).AddEndpointFilter(RequireLocalClient);
+
+    sessions.MapPost("/{id:guid}/end", async (Guid id, ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
+        await store.EndAsync(Owner(user), id, cancellationToken) is { } session
+            ? Results.Ok(session)
+            : Problem(404, "session_not_found", "Nie znaleziono sesji.")).AddEndpointFilter(RequireLocalClient);
+}
 
 static Guid Owner(ClaimsPrincipal account) => Guid.Parse(account.FindFirstValue(ClaimTypes.NameIdentifier)!);
 

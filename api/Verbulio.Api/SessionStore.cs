@@ -2,13 +2,14 @@ using System.Text.Json;
 using Npgsql;
 using NpgsqlTypes;
 using Verbulio.Learning;
+using Verbulio.Learning.Placement;
 
 namespace Verbulio.Api;
 
 internal sealed record WordState(string Id, TranslationDirection Direction, AnswerMode Mode, ReviewSchedule? Review)
 {
-    internal SessionWord ToSessionWord() =>
-        FixtureDictionary.ById[Id] with { NextDirection = Direction, NextMode = Mode, Review = Review };
+    internal SessionWord ToSessionWord(LearningCatalog catalog) =>
+        catalog.Words[Id] with { NextDirection = Direction, NextMode = Mode, Review = Review };
 }
 
 internal sealed record StoredAnswer(Guid Id, LearningAnswer Answer, DateTimeOffset AnsweredAt);
@@ -19,12 +20,8 @@ internal sealed record SessionState(int Version, int Seed, WordState[] Words, Li
 {
     internal LearningSession Reconstitute()
     {
-        if (Version != FixtureDictionary.Version)
-        {
-            throw new InvalidOperationException("Unsupported learning session version.");
-        }
-
-        var session = new LearningSession(Words.Select(word => word.ToSessionWord()), FixtureDictionary.Evaluator, Seed);
+        var catalog = LearningCatalog.Resolve(Version);
+        var session = new LearningSession(Words.Select(word => word.ToSessionWord(catalog)), catalog.Evaluator, Seed);
         foreach (var answer in Answers)
         {
             session.Submit(answer.Id, answer.Answer, answer.AnsweredAt);
@@ -41,7 +38,7 @@ internal sealed record SessionState(int Version, int Seed, WordState[] Words, Li
 
 internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider timeProvider)
 {
-    internal async Task<SessionView?> StartAsync(Guid owner, CancellationToken cancellationToken)
+    internal async Task<SessionView?> StartAsync(Guid owner, VocabularyLevel? startingLevel, CancellationToken cancellationToken)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
@@ -78,8 +75,10 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
         }
 
         var seed = Random.Shared.Next();
-        var candidates = FixtureDictionary.ById.Values.Select(word =>
-            progress.TryGetValue(word.Id, out var saved) ? saved.ToSessionWord() : word);
+        var catalog = startingLevel is null ? LearningCatalog.Fixture : LearningCatalog.Pilot;
+        var candidates = catalog.Words.Values
+            .Where(word => startingLevel is null || catalog.Levels[word.Id] == startingLevel || progress.ContainsKey(word.Id))
+            .Select(word => progress.TryGetValue(word.Id, out var saved) ? saved.ToSessionWord(catalog) : word);
         var selected = SessionSelection.Select(candidates, timeProvider.GetUtcNow(), seed);
         if (selected.Count == 0)
         {
@@ -87,7 +86,7 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
         }
 
         var sessionId = Guid.NewGuid();
-        var state = new SessionState(FixtureDictionary.Version, seed,
+        var state = new SessionState(catalog.Version, seed,
             selected.Select(word => new WordState(word.Id, word.NextDirection, word.NextMode, word.Review)).ToArray(), [], false);
         await using var insert = new NpgsqlCommand(
             "INSERT INTO learning_sessions (id, owner_id, active, state) VALUES ($1, $2, true, $3)", connection, transaction);
