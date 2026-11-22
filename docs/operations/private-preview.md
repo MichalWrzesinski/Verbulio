@@ -14,7 +14,7 @@ Record the archive checksum before transfer and verify it after transfer. The ar
 
 ## Preview host
 
-The package requires an ASP.NET Core 10 runtime, a dedicated PostgreSQL database and user, an HTTPS certificate for localhost and a persistent directory for the preview's key ring. Use a restrictive service user and an isolated installation directory. Preserve the existing placeholder and its installation.
+The package requires an ASP.NET Core 10 runtime, a dedicated PostgreSQL database and user, an HTTPS certificate valid for 127.0.0.1 and a persistent directory for the preview's key ring. Use a restrictive service user and an isolated installation directory. Preserve the existing placeholder and its installation.
 
 Set the following environment values outside the release directory using a service configuration readable only by the operator and the service. In commands that start the app, use the extracted release as the working directory.
 
@@ -28,10 +28,10 @@ Set the following environment values outside the release directory using a servi
 
 Back up and verify restoration of the isolated database before updating a preview with data. Run `dotnet Verbulio.Api.dll --migrate`, then `dotnet Verbulio.Api.dll` with that configuration. The preview listens on the VPS IPv4 loopback on port 5443. Keep it off the public reverse proxy and firewall. The fixture accepts test accounts and has no transactional email delivery.
 
-From a machine with authorized SSH access, forward the port and visit `https://localhost:5443/` with the preview certificate trusted.
+From a machine with authorized SSH access, forward the port and visit `https://127.0.0.1:5443/` with the preview certificate trusted.
 
 ```sh
-ssh -N -o ExitOnForwardFailure=yes -L 5443:127.0.0.1:5443 webhome-vps
+ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:5443:127.0.0.1:5443 webhome-vps
 ```
 
 Check the health endpoint through the tunnel and complete placement, registration, login and a category session with test data. Revert by stopping the preview service and selecting the previous release, restoring the isolated database if the candidate changed the schema incompatibly. For the first preview, stopping the service withdraws access. Keep the public virtual host separate.

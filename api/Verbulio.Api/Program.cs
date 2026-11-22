@@ -134,6 +134,11 @@ app.Use(async (context, next) =>
         return;
     }
 
+    if (preview)
+    {
+        context.Response.Headers["X-Robots-Tag"] = "noindex";
+    }
+
     context.Response.Headers.CacheControl = "no-store";
     await next(context);
 });
