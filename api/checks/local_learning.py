@@ -151,6 +151,12 @@ def registration_data(resource, email):
     }
 
 
+def skip_placement(browser, resource):
+    for number in range(1, 21):
+        browser.request(resource + "/answers", 200, "POST",
+                        {"questionNumber": number, "skip": True}, str(uuid.uuid4()))
+
+
 def exercise_registration(owner, other, anonymous, resource):
     email_base = uuid.uuid4().hex
     data = registration_data(resource, email_base + "@example.invalid")
@@ -184,9 +190,13 @@ def exercise_registration(owner, other, anonymous, resource):
     second = other.request(tests, method="POST")
     second_resource = f"{tests}/{second['id']}"
     other.request(REGISTRATION, 409, "POST", registration_data(second_resource, candidate["email"]))
-    for number in range(1, 21):
-        other.request(second_resource + "/answers", 200, "POST",
-                      {"questionNumber": number, "skip": True}, str(uuid.uuid4()))
+    skip_placement(other, second_resource)
+    assert other.request(second_resource)["test"]["result"] == "A1"
+    replacement = other.request(second_resource + "/restart", method="POST")
+    assert signature(other.request(REGISTRATION, 409, "POST",
+                                   registration_data(second_resource, candidate["email"]))) == signature(denied)
+    second_resource = f"{tests}/{replacement['id']}"
+    skip_placement(other, second_resource)
     existing_email = [data, candidate][winner]["email"].upper()
     assert signature(other.request(REGISTRATION, 409, "POST", registration_data(second_resource, existing_email))) == signature(denied)
     second_account = other.request(REGISTRATION, 201, "POST",
@@ -282,6 +292,15 @@ def run(dotnet):
                 assert ended["summary"]["wordsResolved"] == 1
                 assert not ended["summary"]["completed"]
                 assert other.request(SESSION, method="POST")["summary"]["wordCount"] == 2
+
+                if previous_api := os.environ.get("VERBULIO_PREVIOUS_API_DLL"):
+                    stop(server)
+                    server = subprocess.Popen([dotnet, previous_api], env=env, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+                    wait_ready(server, base)
+                    claimed_test = placement[0]
+                    owner.request(claimed_test + "/restart", 404, "POST")
+                    assert owner.request(claimed_test)["test"]["result"] == "A1"
+                    print("Previous API rollback check passed on migrated PostgreSQL with a claimed test.")
             except Exception:
                 log.seek(0)
                 print(log.read(), file=sys.stderr)

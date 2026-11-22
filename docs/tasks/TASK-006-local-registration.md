@@ -16,7 +16,7 @@ Exercise the server-side account creation and single-use placement result segmen
 
 ## Verification
 
-CP-001, local account creation. The Release build and all 55 .NET tests passed. PostgreSQL integration covered unauthorized, foreign, unfinished, missing and consumed tests, strict input, a simultaneous claim, case-insensitive duplicate email and successful retry after rollback. An upgrade from migrations 001 and 002 preserved a previously stored test. The local database check verified Identity hashes and matching claimed levels for both created accounts.
+CP-001, local account creation. The Release build and all 55 .NET tests passed. PostgreSQL integration covered unauthorized, foreign, unfinished, missing, superseded and consumed tests, strict input, a simultaneous claim, case-insensitive duplicate email and successful retry after rollback. An upgrade from migrations 001 and 002 preserved a previously stored test. The previous Release API also ran against the migrated database and rejected a restart after an account had claimed the result. The local database check verified Identity hashes and matching claimed levels for both created accounts.
 
 ## Report
 
