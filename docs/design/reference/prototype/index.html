@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; script-src 'none'; base-uri 'none'; form-action 'self'">
+<meta name="robots" content="noindex">
+<title>Prototyp · Verbulio</title>
+<link rel="icon" href="../brand/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../tokens/tokens.css">
+<link rel="stylesheet" href="../views/assets/app.css">
+<link rel="stylesheet" href="proto.css">
+<link rel="stylesheet" href="../views/assets/comic.css">
+</head>
+<body>
+<div class="pi">
+<header class="pi-head">
+  <a class="brand" href="j1-01-start.html" aria-label="Verbulio, strona startowa"><img src="../brand/logo-full.svg" alt=""></a>
+  <h1 class="h1"><span>Prototyp: podróże <span class="nw">J-1</span> do <span class="nw">J-5</span></span></h1>
+  <p class="lead"><span>Klikalne ekrany z widoków <span class="nw">hi-fi,</span> bez JavaScriptu. Każdy ekran ma główną akcję prowadzącą do następnego kroku i link „Wróć do listy podróży” na dole. Po „Dobrze!” ekran sam przechodzi dalej po 2 s, tak jak przejście po ok. 1 s w aplikacji. Najlepiej oglądać w trybie telefonu, 375 px.</span></p>
+  <p class="small">Statyczne widoki wszystkich stanów: <a href="../views/index.html">indeks widoków</a>.</p>
+</header>
+<main class="pi-list">
+<section class="pj" id="j1" aria-labelledby="j1-t">
+  <h2 id="j1-t"><span><span class="nw">J-1:</span> Ania po raz pierwszy</span></h2>
+  <p class="pj-who">Gość, telefon</p>
+  <a class="key btn btn--primary pj-start" href="j1-01-start.html">Zacznij podróż</a>
+  <ol class="pj-steps">
+      <li><p><a class="link" href="j1-01-start.html">Strona startowa</a> <span>kliknij „Sprawdź swój poziom”</span></p></li>
+      <li><p><a class="link" href="j1-02-test.html">Test, pytanie z tagami</a> <span>wybierz dowolny tag albo „Nie wiem”</span></p></li>
+      <li><p><a class="link" href="j1-03-test-wpisywanie.html">Test, wpisywanie</a> <span>20 pytań skrócone do dwóch</span></p></li>
+      <li><p><a class="link" href="j1-04-wynik.html">Wynik B1</a> <span>„Załóż konto i zacznij naukę”</span></p></li>
+      <li><p><a class="link" href="j1-05-rejestracja.html">Rejestracja</a> <span>pola są wypełnione</span></p></li>
+      <li><p><a class="link" href="j1-06-pierwsza-sesja.html">Pierwsza sesja</a> <span>„okno” jest poprawne</span></p></li>
+  </ol>
+  <div class="pj-more"><h3>Inne wejścia</h3><ul><li><a class="link" href="j1-07-wznowienie.html">Wznowienie testu</a></li><li><a class="link" href="j1-08-powrot-z-wynikiem.html">Powrót z wynikiem</a></li><li><a class="link" href="j1-09-rejestracja-bez-wyniku.html">Rejestracja bez wyniku</a></li></ul></div>
+</section><section class="pj" id="j2" aria-labelledby="j2-t">
+  <h2 id="j2-t"><span><span class="nw">J-2:</span> Ania codziennie</span></h2>
+  <p class="pj-who">Użytkownik, krótka sesja</p>
+  <a class="key btn btn--primary pj-start" href="j2-01-logowanie.html">Zacznij podróż</a>
+  <ol class="pj-steps">
+      <li><p><a class="link" href="j2-01-logowanie.html">Logowanie</a> <span>pola są wypełnione</span></p></li>
+      <li><p><a class="link" href="j2-02-ekran-glowny.html">Ekran główny</a> <span>„Ćwicz dalej”</span></p></li>
+      <li><p><a class="link" href="j2-03-dom.html">house: tagi</a> <span>„dom” daje „Dobrze!” i samo przejście</span></p></li>
+      <li><p><a class="link" href="j2-04-supply.html">supply: tagi</a> <span>spróbuj błędnej odpowiedzi</span></p></li>
+      <li><p><a class="link" href="j2-05-boat.html">boat: wpisywanie</a> <span>„lodz” zaliczone z poprawką</span></p></li>
+      <li><p><a class="link" href="j2-07-houses.html">houses: odmiana</a> <span>„domy”, podpowiedź i druga próba</span></p></li>
+      <li><p><a class="link" href="j2-10-podsumowanie.html">Podsumowanie</a> <span>„Gotowe” wraca na ekran główny</span></p></li>
+  </ol>
+  <div class="pj-more"><h3>Inne wejścia</h3><ul><li><a class="link" href="k-06-logowanie-blad.html">Błędne dane logowania</a></li><li><a class="link" href="k-01-reset-prosba.html">Nie pamiętam hasła</a></li><li><a class="link" href="k-03-nowe-haslo.html"><span>Link z <span class="nw">e-maila:</span> nowe hasło</span></a></li><li><a class="link" href="k-05-link-niewazny.html">Link nieważny</a></li><li><a class="link" href="k-07-adres-potwierdzony.html"><span>Link z <span class="nw">e-maila:</span> adres potwierdzony</span></a></li><li><a class="link" href="k-08-nauka-wstrzymana.html">Nauka wstrzymana po 7 dniach</a></li></ul><h3>Stany bez przejścia (widoki statyczne)</h3><ul><li><a class="link" href="../views/j2-09-toast-offline.html">Brak sieci w sesji</a></li><li><a class="link" href="../views/j2-12-brak-sieci-start.html">Brak sieci przed startem</a></li><li><a class="link" href="../views/j2-05b-fb-dobrze-bez-przejscia.html">Przejście wyłączone</a></li><li><a class="link" href="../views/j2-13-podsumowanie-krotsza.html">Krótsza sesja: brak nowych słówek</a></li><li><a class="link" href="../views/j2-02-ekran-glowny-niepotwierdzony.html">Adres niepotwierdzony</a></li></ul></div>
+</section><section class="pj" id="j3" aria-labelledby="j3-t">
+  <h2 id="j3-t"><span><span class="nw">J-3:</span> Ania wybiera kategorię</span></h2>
+  <p class="pj-who">Użytkownik</p>
+  <a class="key btn btn--primary pj-start" href="j3-01-ekran-glowny.html">Zacznij podróż</a>
+  <ol class="pj-steps">
+      <li><p><a class="link" href="j3-01-ekran-glowny.html">Ekran główny</a> <span>„Wybierz kategorię”</span></p></li>
+      <li><p><a class="link" href="j3-02-kategorie.html">Lista kategorii</a> <span>wybierz „Zdrowie i samopoczucie”</span></p></li>
+      <li><p><a class="link" href="j3-03-zdrowie.html">Sesja z kategorii</a> <span>ostatnie z 6 słówek</span></p></li>
+      <li><p><a class="link" href="j3-05-podsumowanie-krotsza.html">Krótsza sesja</a> <span>„Ćwicz: Praca”</span></p></li>
+      <li><p><a class="link" href="j3-03-praca.html">Sesja z innej kategorii</a> <span>w prototypie od razu podsumowanie</span></p></li>
+  </ol>
+  <div class="pj-more"><h3>Inne wejścia</h3><ul><li><a class="link" href="j3-06-pusta-kategoria.html">Pusta kategoria „Emocje”</a></li><li><a class="link" href="j3-03-podroze.html">Sesja z kategorii „Podróże”</a></li></ul></div>
+</section><section class="pj" id="j4" aria-labelledby="j4-t">
+  <h2 id="j4-t"><span><span class="nw">J-4:</span> Ania sprawdza postępy</span></h2>
+  <p class="pj-who">Użytkownik po kilku dniach przerwy</p>
+  <a class="key btn btn--primary pj-start" href="j4-01-ekran-glowny.html">Zacznij podróż</a>
+  <ol class="pj-steps">
+      <li><p><a class="link" href="j4-01-ekran-glowny.html">Ekran główny, seria 0</a> <span>kliknij serię albo kółko profilu</span></p></li>
+      <li><p><a class="link" href="j4-02-profil.html">Profil</a> <span>seria 0, rekord 12</span></p></li>
+      <li><p><a class="link" href="j4-03-sesja.html">Ostatnie słówko sesji</a> <span>dowolny tag</span></p></li>
+      <li><p><a class="link" href="j4-04-podsumowanie.html">Podsumowanie</a> <span>seria zaczyna się od 1</span></p></li>
+      <li><p><a class="link" href="j4-06-profil.html">Profil po sesji</a> <span>„Ustawienia” w prawym rogu</span></p></li>
+      <li><p><a class="link" href="j4-07-ustawienia.html">Ustawienia</a> <span>przełącznik działa bez skryptu</span></p></li>
+      <li><p><a class="link" href="j4-08-usun-konto.html">Usunąć konto?</a> <span>„Zostaw konto” albo „Usuń konto na zawsze”</span></p></li>
+  </ol>
+  <div class="pj-more"><h3>Inne wejścia</h3><ul><li><a class="link" href="j4-11-profil-nowe-konto.html">Nowe konto, same zera</a></li><li><a class="link" href="j4-10-profil.html">Profil z serią 7 dni</a></li></ul></div>
+</section><section class="pj" id="j5" aria-labelledby="j5-t">
+  <h2 id="j5-t"><span><span class="nw">J-5:</span> Rekruter ogląda portfolio</span></h2>
+  <p class="pj-who">Odwiedzający demo, telefon albo desktop</p>
+  <a class="key btn btn--primary pj-start" href="j5-01-demo-wejscie.html">Zacznij podróż</a>
+  <ol class="pj-steps">
+      <li><p><a class="link" href="j5-01-demo-wejscie.html">Wejście do demo</a> <span>samo przechodzi po 2 s</span></p></li>
+      <li><p><a class="link" href="j5-02-demo-ekran-glowny.html">Ekran główny demo</a> <span>baner u góry, „Ćwicz dalej”</span></p></li>
+      <li><p><a class="link" href="j5-03-habit.html">Sesja na własnej kopii</a> <span>„nawyk” jest poprawne</span></p></li>
+      <li><p><a class="link" href="j5-04-podsumowanie.html">Podsumowanie</a> <span>seria 8 dni</span></p></li>
+      <li><p><a class="link" href="j5-06-demo-profil.html">Profil demo</a> <span>zmiany po sesji, ustawienia bez konta</span></p></li>
+      <li><p><a class="link" href="j5-08-jak-to-zbudowano.html">Jak to zbudowano</a> <span>liczby i link do repozytorium</span></p></li>
+  </ol>
+  <div class="pj-more"><h3>Inne wejścia</h3><ul><li><a class="link" href="j5-09-demo-limit.html">Limit kopii demo</a></li><li><a class="link" href="prywatnosc.html">Polityka prywatności (szkic)</a></li></ul></div>
+</section>
+</main>
+</div>
+<footer class="legal-footer">
+  <p>Copyright 2026 Verbulio</p>
+  <nav aria-label="Dokumenty prawne">
+    <a class="link" href="regulamin.html">Regulamin</a>
+    <a class="link" href="prywatnosc.html">Polityka prywatności</a>
+  </nav>
+</footer>
+</body>
+</html>

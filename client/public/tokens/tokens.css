@@ -1,0 +1,94 @@
+/* Verbulio design tokens: color palette A "Violet" (step 3.3). */
+:root {
+  --color-bg: #BFE6FF;
+  --color-ink: #10233F;
+  --color-ink-muted: #2F4A68;
+  --color-surface: #F6FBFF;
+  --color-border: #3F6FA6;
+  --color-primary: #6A3BD0;
+  --color-primary-edge: #46249A;
+  --color-on-primary: #FFFFFF;
+  --color-success: #14803C;
+  --color-success-edge: #0C5C2A;
+  --color-on-success: #FFFFFF;
+  --color-error: #C22A3A;
+  --color-error-edge: #8E1A28;
+  --color-on-error: #FFFFFF;
+  --color-progress: #5B33BD;
+  --color-progress-track: #8FBCE0;
+  --color-focus: #10233F;
+}
+
+/* Typography (step 3.4). Fonts are self-hosted, see tokens/fonts/. */
+@font-face {
+  font-family: "Baloo 2";
+  src: url("fonts/Baloo2-Variable.ttf") format("truetype");
+  font-weight: 400 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Nunito";
+  src: url("fonts/Nunito-Variable.ttf") format("truetype");
+  font-weight: 200 1000;
+  font-display: swap;
+}
+:root {
+  --font-display: "Baloo 2", "Nunito", system-ui, sans-serif;
+  --font-body: "Nunito", system-ui, sans-serif;
+  --weight-display: 800;
+  --weight-body: 500;
+  --weight-strong: 700;
+  --size-word: clamp(2.25rem, 12vw, 3.25rem);
+  --size-heading: 2.125rem;
+  --size-button: 1.125rem;
+  --size-body: 1rem;
+  --size-small: 0.875rem;
+}
+
+/* Component tokens (step 3.6): variant C with a fix.
+   Rule: everything you can press is raised, everything you read is flat.
+   Board: boards/3.6-components.html. */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --radius-key: 12px;
+  --radius-field: 12px;
+  --radius-panel: 14px;
+  --radius-chip: 999px;
+  --stroke: 2px;
+
+  --edge-primary: 5px;
+  --edge-secondary: 4px;
+  --edge-tag: 4px;
+  --edge-row: 4px;
+  --edge-field: 0px; /* unit required: used inside calc() and max() */
+  --edge-panel: 0px;
+  --edge-chip: 0px;
+
+  --height-button: 56px;
+  --height-tag: 60px;
+  --height-progress: 8px;
+  --tag-gap: 10px;
+  --tag-padding-x: 8px;
+
+  /* State colors, WCAG contrast in the comments. */
+  --color-primary-hover: #7B4DE3;     /* white text 5.23:1 */
+  --color-primary-pressed: #5A2EBD;   /* white text 8.20:1 */
+  --color-error-hover: #D13A4A;       /* white text 4.76:1 */
+  --color-surface-hover: #FFFFFF;     /* ink 15.74:1 */
+  --color-surface-pressed: #DDEEFB;   /* ink 13.26:1 */
+  --color-disabled-bg: #DCE9F3;       /* disabled text 6.21:1 */
+  --color-disabled-text: #3F556E;     /* on page background 5.84:1 */
+  --color-disabled-border: #5A7898;   /* on page background 3.49:1 */
+  --color-success-tint: #E2F6E8;      /* ink 13.93:1, success outline 4.44:1 */
+  --color-error-tint: #FDE7E9;        /* ink 13.33:1, error outline 4.82:1 */
+  --color-fix-tint: #FFF1C9;          /* ink 14.00:1 */
+  --color-fix: #7A4F00;               /* on fix tint 6.34:1, white icon 7.13:1 */
+  --color-hint-tint: #ECE5FF;         /* ink 12.91:1, primary outline 5.47:1 */
+  --color-learning-stripe: #C9B8F5;   /* next to primary 3.70:1 */
+}

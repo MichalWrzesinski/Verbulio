@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; script-src 'none'; base-uri 'none'; form-action 'self'">
+<meta name="robots" content="noindex">
+<meta name="description" content="Prototyp J-5: ustawienia demo.">
+<title>Ustawienia demo · Verbulio</title>
+<link rel="icon" href="../brand/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../tokens/tokens.css">
+<link rel="stylesheet" href="../views/assets/app.css">
+<link rel="stylesheet" href="proto.css">
+<link rel="stylesheet" href="../views/assets/comic.css">
+</head>
+<body class="proto">
+<svg class="sprite" aria-hidden="true" focusable="false">
+<symbol id="i-check" viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-x" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></symbol>
+<symbol id="i-close" viewBox="0 0 20 20"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
+<symbol id="i-back" viewBox="0 0 20 20"><path d="M12.5 4.5L7 10l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-arrow" viewBox="0 0 20 20"><path d="M4 10h11M10.5 5l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-ext" viewBox="0 0 20 20"><path d="M11 3.5h5.5V9M16 4l-7 7M14 12v3.5a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 3 15.5v-8A1.5 1.5 0 0 1 4.5 6H8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-bulb" viewBox="0 0 20 20"><path d="M10 2.5a5.6 5.6 0 0 0-3.2 10.2c.6.4.9 1 .9 1.6h4.6c0-.6.3-1.2.9-1.6A5.6 5.6 0 0 0 10 2.5zM8 17.2h4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-spark" viewBox="0 0 20 20"><path d="M10 1.5c.9 4.7 2.8 6.7 8 8.5-5.2 1.8-7.1 3.8-8 8.5-.9-4.7-2.8-6.7-8-8.5 5.2-1.8 7.1-3.8 8-8.5z" fill="currentColor"/></symbol>
+<symbol id="i-user" viewBox="0 0 20 20"><circle cx="10" cy="6.5" r="3.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M3.5 17.5c.8-3.6 3.3-5 6.5-5s5.7 1.4 6.5 5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+<symbol id="i-alert" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M10 5.8v5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="10" cy="14.2" r="1.5" fill="currentColor"/></symbol>
+<symbol id="i-mail" viewBox="0 0 20 20"><rect x="2.5" y="4.5" width="15" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M3.5 6l6.5 5 6.5-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-offline" viewBox="0 0 20 20"><path d="M2 7.5a12 12 0 0 1 4-2.5M9 4.1a12 12 0 0 1 9 3.4M5 11a7.5 7.5 0 0 1 2.8-1.7M12.2 9.2A7.5 7.5 0 0 1 15 11M8 14a3 3 0 0 1 4 0M3 2.5l14 15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+<symbol id="i-shield" viewBox="0 0 20 20"><path d="M10 2.5l6 2.3v4.6c0 4-2.6 6.9-6 8.1-3.4-1.2-6-4.1-6-8.1V4.8z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></symbol>
+<symbol id="i-pause" viewBox="0 0 20 20"><path d="M7.5 5v10M12.5 5v10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></symbol>
+<symbol id="i-doc" viewBox="0 0 20 20"><path d="M5.5 2.5h6l4 4v10a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-13a1 1 0 0 1 1-1zM11 3v4h4M7.5 11h5M7.5 14h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+<div class="app">
+<aside class="demo-bar" aria-label="Konto demo">
+  <p><b>Konto demo.</b> Zmiany widzisz tylko Ty i znikną po wygaśnięciu kopii.</p>
+  <a class="link" href="j5-08-jak-to-zbudowano.html">Jak to zbudowano</a>
+</aside>
+<header class="form-top"><a class="link back" href="j5-06-demo-profil.html"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-back"/></svg>Profil</a></header>
+<main class="stack-l">
+  <h1 class="h1">Ustawienia</h1>
+  <div class="set">
+    <section class="set-sec" aria-labelledby="s-nauka">
+      <h2 id="s-nauka">Nauka</h2>
+      <label class="sw" for="auto">
+      <input class="sw-in" id="auto" name="auto" type="checkbox" role="switch" checked aria-describedby="auto-s">
+      <span class="sw-track"><span class="sw-k"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-check"/></svg></span></span>
+      <span class="sw-b"><span class="sw-t">Automatyczne przejście po poprawnej odpowiedzi</span><span class="sw-s" id="auto-s">Po „Dobrze!” następne słówko pojawia się samo po ok. 1 s.</span></span>
+    </label>
+    </section>
+    <section class="set-sec" aria-labelledby="s-demo">
+      <h2 id="s-demo">Konto demo</h2>
+      <p class="small"><span>W demo nie ma <span class="nw">e-maila,</span> hasła ani usuwania konta. Twoja kopia danych zniknie sama po wygaśnięciu.</span></p>
+    </section>
+  </div>
+</main>
+</div>
+<p class="proto-back"><a class="link" href="index.html">Wróć do listy podróży</a></p>
+<footer class="legal-footer">
+  <p>Copyright 2026 Verbulio</p>
+  <nav aria-label="Dokumenty prawne">
+    <a class="link" href="regulamin.html">Regulamin</a>
+    <a class="link" href="prywatnosc.html">Polityka prywatności</a>
+  </nav>
+</footer>
+</body>
+</html>

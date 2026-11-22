@@ -1,0 +1,22 @@
+/* Index of hi-fi views (step 3.8). Not part of the product UI. */
+.ix { max-width: 72rem; margin: 0 auto; padding: var(--space-5) var(--space-4) 64px; }
+.ix-head { display: grid; gap: var(--space-3); justify-items: start; }
+.ix-head .lead { max-width: 62ch; }
+.ix-toc { display: flex; flex-wrap: wrap; gap: 0 var(--space-4); }
+.ix-sec { margin-top: 48px; display: grid; gap: var(--space-2); }
+.ix-sec h2 { font-family: var(--font-display); font-weight: var(--weight-display); font-size: 1.625rem; line-height: 1.15; }
+.vlist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5) var(--space-3); margin-top: var(--space-3); counter-reset: v; }
+.vi { display: grid; gap: 2px; align-content: start; min-width: 0; counter-increment: v; }
+.vi-a { display: grid; gap: var(--space-2); color: var(--color-ink); text-decoration: none; border-radius: 14px; }
+.vi-a img { width: 100%; aspect-ratio: 375 / 812; object-fit: cover; object-position: top; border-radius: 14px; border: var(--stroke) solid var(--color-border); background: var(--color-surface); }
+.vi-t { font-family: var(--font-display); font-weight: var(--weight-display); line-height: 1.2; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; text-decoration-color: var(--color-primary); }
+.vlist .vi-t::before { content: counter(v) ". "; color: var(--color-primary-edge); }
+.vi-d { font-size: var(--size-small); color: var(--color-ink-muted); line-height: 1.35; }
+.vi-us { font-size: 0.8125rem; font-weight: var(--weight-strong); color: var(--color-primary-edge); }
+@media (hover: hover) { .vi-a:hover img { border-color: var(--color-primary); } .vi-a:hover .vi-t { text-decoration-thickness: 4px; } }
+.dlist { display: grid; gap: var(--space-5); margin-top: var(--space-3); }
+.dlist img { width: 100%; height: auto; border-radius: 14px; border: var(--stroke) solid var(--color-border); }
+.ix-foot { margin-top: 56px; }
+@media (min-width: 640px) { .vlist { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .vlist { grid-template-columns: repeat(5, minmax(0, 1fr)); } .dlist { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ix-toc .link { min-width: 44px; justify-content: center; }
