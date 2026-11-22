@@ -63,7 +63,7 @@
         <div class="s-answer">
           <div class="tags-box">
             <div class="tags tags--m" role="group" aria-labelledby="q-hint q-word">
-              @for (choice of question.choices; track choice; let index = $index) {
+              @for (choice of question.choices; track $index; let index = $index) {
                 @let right = result?.correctTranslations?.includes(choice);
                 <button
                   type="button"
