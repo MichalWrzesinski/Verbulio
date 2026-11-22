@@ -24,6 +24,21 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test -- --watch=false
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: api/global.json
+      - name: Package private preview
+        working-directory: .
+        run: bash scripts/build-preview.sh "$RUNNER_TEMP/verbulio-preview.tar.gz"
+      - name: Keep the integrated preview package
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: verbulio-preview
+          path: ${{ runner.temp }}/verbulio-preview.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
 
   backend:
     name: Backend checks
