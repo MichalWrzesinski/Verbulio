@@ -1,0 +1,39 @@
+name: verbulio-preview
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: verbulio_preview
+      POSTGRES_USER: verbulio_preview
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a preview database password}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    ports:
+      - "127.0.0.1:55437:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "verbulio_preview", "-d", "verbulio_preview"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    mem_limit: 192m
+    restart: unless-stopped
+  app:
+    image: mcr.microsoft.com/dotnet/aspnet:10.0
+    network_mode: host
+    user: "${PREVIEW_UID:?}:${PREVIEW_GID:?}"
+    working_dir: /app
+    command: ["dotnet", "Verbulio.Api.dll"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Preview
+      ConnectionStrings__Learning: Host=127.0.0.1;Port=55437;Database=verbulio_preview;Username=verbulio_preview;Password=${POSTGRES_PASSWORD}
+      LearningKeyDirectory: /keys
+      ASPNETCORE_Kestrel__Certificates__Default__Path: /tls/preview.crt
+      ASPNETCORE_Kestrel__Certificates__Default__KeyPath: /tls/preview.key
+    volumes:
+      - ${PREVIEW_RELEASE:?}:/app:ro
+      - ./keys:/keys
+      - ./tls:/tls:ro
+    mem_limit: 256m
+    restart: unless-stopped
+volumes:
+  pgdata:
