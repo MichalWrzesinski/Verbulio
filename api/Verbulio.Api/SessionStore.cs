@@ -13,7 +13,8 @@ internal sealed record WordState(string Id, TranslationDirection Direction, Answ
 }
 
 internal sealed record StoredAnswer(Guid Id, LearningAnswer Answer, DateTimeOffset AnsweredAt);
-internal sealed record SessionView(Guid Id, LearningQuestion? Question, LearningSummary Summary, string? Category);
+internal sealed record SessionView(Guid Id, LearningQuestion? Question, LearningSummary Summary, string? Category, string? CategoryTitle);
+internal sealed record CategoryView(string Id, string Title, int AvailableWords);
 internal sealed record AnswerView(LearningFeedback Feedback, SessionView Session);
 
 internal sealed record SessionState(int Version, int Seed, WordState[] Words, List<StoredAnswer> Answers, bool Ended, string? Category = null)
@@ -61,28 +62,11 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
             }
         }
 
-        var progress = new Dictionary<string, WordState>(StringComparer.Ordinal);
-        await using (var select = new NpgsqlCommand(
-            "SELECT word_id, direction, mode, review_box, due_at FROM word_progress WHERE owner_id = $1",
-            connection, transaction))
-        {
-            select.Parameters.AddWithValue(owner);
-            await using var reader = await select.ExecuteReaderAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                var id = reader.GetString(0);
-                progress.Add(id, new WordState(id, (TranslationDirection)reader.GetInt32(1), (AnswerMode)reader.GetInt32(2),
-                    new ReviewSchedule((ReviewBox)reader.GetInt32(3), reader.GetFieldValue<DateTimeOffset>(4))));
-            }
-        }
-
+        var progress = await ReadProgressAsync(owner, connection, transaction, cancellationToken);
         var seed = Random.Shared.Next();
         var catalog = startingLevel is null ? LearningCatalog.Fixture : LearningCatalog.Pilot;
-        var candidates = catalog.Words.Values
-            .Where(word => category is null || category.WordIds.Contains(word.Id))
-            .Where(word => startingLevel is null || catalog.Levels[word.Id] == startingLevel || progress.ContainsKey(word.Id))
-            .Select(word => progress.TryGetValue(word.Id, out var saved) ? saved.ToSessionWord(catalog) : word);
-        var selected = SessionSelection.Select(candidates, timeProvider.GetUtcNow(), seed);
+        var selected = SessionSelection.Select(Candidates(catalog, startingLevel, progress, category),
+            timeProvider.GetUtcNow(), seed);
         if (selected.Count == 0)
         {
             return null;
@@ -99,6 +83,45 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
         await insert.ExecuteNonQueryAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return View(sessionId, state.Reconstitute(), state.Category);
+    }
+
+    internal async Task<CategoryView[]> CategoriesAsync(Guid owner, VocabularyLevel startingLevel,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        var progress = await ReadProgressAsync(owner, connection, null, cancellationToken);
+        var now = timeProvider.GetUtcNow();
+        return LearningCategory.All.Select(category => new CategoryView(category.Id, category.Title,
+            Candidates(LearningCatalog.Pilot, startingLevel, progress, category)
+                .Count(word => word.Review is null || word.Review.DueAt <= now))).ToArray();
+    }
+
+    private static IEnumerable<SessionWord> Candidates(LearningCatalog catalog, VocabularyLevel? startingLevel,
+        Dictionary<string, WordState> progress, LearningCategory? category) =>
+        catalog.Words.Values
+            .Where(word => category is null || category.WordIds.Contains(word.Id))
+            .Where(word => startingLevel is null || catalog.Levels[word.Id] == startingLevel || progress.ContainsKey(word.Id))
+            .Select(word => progress.TryGetValue(word.Id, out var saved) ? saved.ToSessionWord(catalog) : word);
+
+    private static async Task<Dictionary<string, WordState>> ReadProgressAsync(Guid owner, NpgsqlConnection connection,
+        NpgsqlTransaction? transaction, CancellationToken cancellationToken)
+    {
+        var progress = new Dictionary<string, WordState>(StringComparer.Ordinal);
+        await using (var select = new NpgsqlCommand(
+            "SELECT word_id, direction, mode, review_box, due_at FROM word_progress WHERE owner_id = $1",
+            connection, transaction))
+        {
+            select.Parameters.AddWithValue(owner);
+            await using var reader = await select.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var id = reader.GetString(0);
+                progress.Add(id, new WordState(id, (TranslationDirection)reader.GetInt32(1), (AnswerMode)reader.GetInt32(2),
+                    new ReviewSchedule((ReviewBox)reader.GetInt32(3), reader.GetFieldValue<DateTimeOffset>(4))));
+            }
+        }
+
+        return progress;
     }
 
     internal async Task<SessionView?> ReadAsync(Guid owner, Guid id, CancellationToken cancellationToken)
@@ -204,7 +227,8 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
     }
 
     private static SessionView View(Guid id, LearningSession session, string? category) =>
-        new(id, session.CurrentQuestion, session.Summary, category);
+        new(id, session.CurrentQuestion, session.Summary, category,
+            LearningCategory.All.FirstOrDefault(item => item.Id == category)?.Title);
 
     private static SessionState Deserialize(string json) =>
         JsonSerializer.Deserialize<SessionState>(json) ?? throw new InvalidOperationException("Missing session state.");

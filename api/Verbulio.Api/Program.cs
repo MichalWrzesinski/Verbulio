@@ -171,8 +171,8 @@ var account = app.MapGroup("/api/v1/local-account")
         ? next(context)
         : ValueTask.FromResult<object?>(Problem(400, "secure_connection_required", "Wymagane jest połączenie HTTPS.")));
 var accountOnly = new AuthorizeAttribute { AuthenticationSchemes = accountScheme };
-account.MapGet("/learning/categories", () =>
-    Results.Ok(LearningCategory.All.Select(category => new { category.Id, category.Title })))
+account.MapGet("/learning/categories", async (ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
+    Results.Ok(await store.CategoriesAsync(Owner(user), StartingLevel(user), cancellationToken)))
     .RequireAuthorization(accountOnly);
 MapLearningSessions(account.MapGroup("/learning/sessions").RequireAuthorization(accountOnly), accountOwned: true);
 account.MapPost("/login", async (LoginRequest request, HttpContext http, AccountCredentials credentials,
