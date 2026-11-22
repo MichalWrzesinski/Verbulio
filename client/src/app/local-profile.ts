@@ -51,7 +51,9 @@ export class LocalProfile {
     this.state.set('loading');
     this.http
       .get<ProfileProgress>('/api/v1/local-account/profile', {
-        params: { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' },
+        headers: {
+          'X-Verbulio-Time-Zone': Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+        },
       })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({

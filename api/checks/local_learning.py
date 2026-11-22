@@ -41,9 +41,11 @@ class Browser:
             urllib.request.HTTPSHandler(context=tls),
         )
 
-    def request(self, path, status=200, method="GET", body=None, key=None, include_cookie_headers=False):
+    def request(self, path, status=200, method="GET", body=None, key=None, include_cookie_headers=False, time_zone=None):
         headers = {"X-Verbulio-Client": "local-learning"}
         data = None
+        if time_zone:
+            headers["X-Verbulio-Time-Zone"] = time_zone
         if key:
             headers["Idempotency-Key"] = key
         if body is not None:
@@ -324,9 +326,9 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     guest.request(IDENTITY, 204, "POST")
     guest.request(ACCOUNT_LEARNING, 401, "POST")
     anonymous.request(ACCOUNT_LEARNING, 401, "POST")
-    profile_path = ACCOUNT + "/profile?timeZone=Pacific/Kiritimati"
+    profile_path = ACCOUNT + "/profile"
+    session_zone = "Pacific/Kiritimati"
     other_zone = "Pacific/Honolulu"
-    start_on_local_day = ACCOUNT_LEARNING + "?timeZone=Pacific/Kiritimati"
     guest.request(profile_path, 401)
     anonymous.request(profile_path, 401)
     no_streak = {"currentDays": 0, "bestDays": 0}
@@ -334,7 +336,7 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     fresh_profile = {
         "startingLevel": "A1", "newWords": 24, "learningWords": 0, "masteredWords": 0, "streak": no_streak,
     }
-    assert owner.request(profile_path) == fresh_profile
+    assert owner.request(profile_path, time_zone=session_zone) == fresh_profile
     categories_path = ACCOUNT + "/learning/categories"
     guest.request(categories_path, 401)
     anonymous.request(categories_path, 401)
@@ -342,8 +344,8 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     assert owner.request(ACCOUNT_LEARNING + "?category=unknown", 404, "POST")["code"] == "category_not_found"
     assert owner.request(ACCOUNT_LEARNING + "?category=emocje", 409, "POST")["code"] == "no_words_available"
 
-    food_path = start_on_local_day + "&category=jedzenie"
-    food = owner.request(food_path, method="POST")
+    food_path = ACCOUNT_LEARNING + "?category=jedzenie"
+    food = owner.request(food_path, method="POST", time_zone=session_zone)
     food_resource = f"{ACCOUNT_LEARNING}/{food['id']}"
     assert food["categoryTitle"] == "Jedzenie"
     assert food["summary"]["wordCount"] == 5
@@ -353,14 +355,14 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     while question := food["question"]:
         assert food["category"] == "jedzenie"
         food_words.add(pilot_item(question)[0]["id"])
-        food = owner.request(food_resource + "/answers?timeZone=" + other_zone, 200, "POST",
-                             pilot_answer(question), str(uuid.uuid4()))["session"]
+        food = owner.request(food_resource + "/answers", 200, "POST",
+                             pilot_answer(question), str(uuid.uuid4()), time_zone=other_zone)["session"]
     assert food_words == {"a1-03", "a1-06", "a1-10", "a1-14", "a1-15"}, food_words
     assert food["category"] == "jedzenie"
     assert food["summary"] == {"firstTryCorrect": 5, "wordCount": 5, "wordsResolved": 5, "completed": True}
     food_profile = fresh_profile | {"newWords": 19, "learningWords": 5, "streak": one_day}
-    assert owner.request(profile_path) == food_profile
-    assert owner.request(ACCOUNT + "/profile?timeZone=" + other_zone)["streak"] == {
+    assert owner.request(profile_path, time_zone=session_zone) == food_profile
+    assert owner.request(profile_path, time_zone=other_zone)["streak"] == {
         "currentDays": 0, "bestDays": 1,
     }
 
@@ -377,7 +379,7 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     assert owner.request(food_path, 409, "POST")["code"] == "no_words_available"
     assert {"id": "jedzenie", "title": "Jedzenie", "availableWords": 0} in owner.request(categories_path)
 
-    first = owner.request(start_on_local_day, method="POST")
+    first = owner.request(ACCOUNT_LEARNING, method="POST", time_zone=session_zone)
     assert first["summary"]["wordCount"] == 10
     resource = f"{ACCOUNT_LEARNING}/{first['id']}"
     submission = pilot_answer(first["question"])
@@ -406,7 +408,7 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     owner.request(resource, 401)
     owner.request(profile_path, 401)
     assert owner.request(ACCOUNT + "/login", 200, "POST", login) == account
-    assert owner.request(profile_path) == food_profile | {"newWords": 18, "learningWords": 6}
+    assert owner.request(profile_path, time_zone=session_zone) == food_profile | {"newWords": 18, "learningWords": 6}
     separate_resource = f"{ACCOUNT_LEARNING}/{separate['id']}"
     assert other.request(separate_resource) == separate
     other.request(separate_resource + "/answers", 200, "POST",
@@ -426,10 +428,10 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
                                 pilot_answer(question), str(uuid.uuid4()))["session"]
     assert len(seen) == 10
     assert current["summary"] == {"firstTryCorrect": 10, "wordCount": 10, "wordsResolved": 10, "completed": True}
-    follow_up = owner.request(start_on_local_day, method="POST")
+    follow_up = owner.request(ACCOUNT_LEARNING, method="POST", time_zone=session_zone)
     assert follow_up["id"] != first["id"]
     assert follow_up["question"]["text"] not in seen
-    assert owner.request(profile_path)["streak"] == one_day
+    assert owner.request(profile_path, time_zone=session_zone)["streak"] == one_day
     assert other.request(profile_path)["streak"] == no_streak
 
 

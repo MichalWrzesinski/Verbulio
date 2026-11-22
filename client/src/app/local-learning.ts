@@ -81,7 +81,6 @@ const clientHeaders = { 'X-Verbulio-Client': 'local-learning' };
 export class LocalLearning {
   private readonly http = inject(HttpClient);
   private readonly injector = inject(Injector);
-  private readonly timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   private readonly destroyRef = inject(DestroyRef);
   protected readonly accountOwned = inject(ActivatedRoute).snapshot.data['accountOwned'] === true;
   private readonly api = this.accountOwned
@@ -118,6 +117,15 @@ export class LocalLearning {
     const verb = this.question()?.mode === 'Choices' ? 'Wybierz' : 'Wpisz';
     return `${verb} po ${this.targetLanguage() === 'pl' ? 'polsku' : 'angielsku'}`;
   });
+
+  private get requestHeaders(): Record<string, string> {
+    return this.accountOwned
+      ? {
+          ...clientHeaders,
+          'X-Verbulio-Time-Zone': Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+        }
+      : clientHeaders;
+  }
 
   constructor() {
     const saved = sessionStorage.getItem(this.activeSessionKey);
@@ -174,11 +182,8 @@ export class LocalLearning {
       if (this.destroyRef.destroyed) return;
       const session = await firstValueFrom(
         this.http.post<Session>(`${this.api}/sessions`, null, {
-          headers: clientHeaders,
-          params: {
-            ...(category ? { category: category.id } : {}),
-            ...(this.accountOwned ? { timeZone: this.timeZone } : {}),
-          },
+          headers: this.requestHeaders,
+          params: category ? { category: category.id } : {},
         }),
       ).catch((error: unknown) => {
         if (
@@ -286,8 +291,7 @@ export class LocalLearning {
             `${this.api}/sessions/${session.id}/answers`,
             attempt.answer,
             {
-              headers: { ...clientHeaders, 'Idempotency-Key': attempt.key },
-              params: this.accountOwned ? { timeZone: this.timeZone } : {},
+              headers: { ...this.requestHeaders, 'Idempotency-Key': attempt.key },
             },
           ),
         );

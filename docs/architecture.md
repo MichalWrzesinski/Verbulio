@@ -1,0 +1,8 @@
+# Architecture notes
+
+## Sensitive data
+
+| Data | Purpose and storage | Recipients and processing location | Retention and deletion |
+| --- | --- | --- | --- |
+| Account-linked learning time zone | Assign a completion to a local calendar day. The learning module reads an optional browser request header and pins the IANA zone in `learning_sessions.state.TimeZoneId`. The current profile uses its request zone without persisting it. | Verbulio API and PostgreSQL on the private preview VPS, with access limited to authorized operators. VPS region remains to be confirmed before public release. The preview has no external data recipient for this field. | Retained with preview session records. Scheduled retention and account deletion are pending. An operator removing test data deletes the owner's session rows or destroys the isolated preview database. |
+| Account-linked credited day and completion time | Count current and longest streaks. `learning_days` stores the owner, credited date, first accepted completion instant for the date and its IANA time zone. The profile returns counts to the owning account. | Same private preview application, PostgreSQL and authorized operators. Only the owning account receives computed counts. No external provider receives completion data in the preview. | Retained in the preview until operator cleanup. Delete the owner's credited-day rows as part of removal before deleting the account row, or destroy the isolated preview database. Account lifecycle and scheduled retention remain separate work. |

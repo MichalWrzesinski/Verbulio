@@ -191,8 +191,8 @@ var account = app.MapGroup("/api/v1/local-account")
         ? next(context)
         : ValueTask.FromResult<object?>(Problem(400, "secure_connection_required", "Wymagane jest połączenie HTTPS.")));
 var accountOnly = new AuthorizeAttribute { AuthenticationSchemes = accountScheme };
-account.MapGet("/profile", async (string? timeZone, ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
-    Results.Ok(await store.ProfileProgressAsync(Owner(user), StartingLevel(user), BrowserTimeZone(timeZone), cancellationToken)))
+account.MapGet("/profile", async (HttpContext http, ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
+    Results.Ok(await store.ProfileProgressAsync(Owner(user), StartingLevel(user), BrowserTimeZone(http), cancellationToken)))
     .RequireAuthorization(accountOnly);
 account.MapGet("/learning/categories", async (ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
     Results.Ok(await store.CategoriesAsync(Owner(user), StartingLevel(user), cancellationToken)))
@@ -293,13 +293,16 @@ static Guid? SessionId(ClaimsPrincipal? user) =>
 static VocabularyLevel StartingLevel(ClaimsPrincipal user) =>
     Enum.Parse<VocabularyLevel>(user.FindFirstValue(AccountSessions.LevelClaim)!);
 
-static TimeZoneInfo BrowserTimeZone(string? id) =>
-    id is { Length: > 0 and <= 100 } && TimeZoneInfo.TryConvertIanaIdToWindowsId(id, out _) &&
+static TimeZoneInfo BrowserTimeZone(HttpContext http)
+{
+    var id = http.Request.Headers["X-Verbulio-Time-Zone"].ToString();
+    return id.Length is > 0 and <= 100 && TimeZoneInfo.TryConvertIanaIdToWindowsId(id, out _) &&
         TimeZoneInfo.TryFindSystemTimeZoneById(id, out var zone) ? zone : TimeZoneInfo.Utc;
+}
 
 static void MapLearningSessions(RouteGroupBuilder sessions, bool accountOwned)
 {
-    sessions.MapPost("", async (string? category, string? timeZone, ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
+    sessions.MapPost("", async (string? category, HttpContext http, ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
     {
         var selectedCategory = accountOwned && category is not null
             ? LearningCategory.All.SingleOrDefault(item => item.Id == category)
@@ -310,7 +313,7 @@ static void MapLearningSessions(RouteGroupBuilder sessions, bool accountOwned)
         }
 
         var session = await store.StartAsync(Owner(user), accountOwned ? StartingLevel(user) : null,
-            selectedCategory, accountOwned ? BrowserTimeZone(timeZone) : null, cancellationToken);
+            selectedCategory, accountOwned ? BrowserTimeZone(http) : null, cancellationToken);
         return session is null
             ? Problem(409, "no_words_available", selectedCategory is null
                 ? "Brak słówek do powtórki."
@@ -323,7 +326,7 @@ static void MapLearningSessions(RouteGroupBuilder sessions, bool accountOwned)
             ? Results.Ok(session)
             : Problem(404, "session_not_found", "Nie znaleziono sesji."));
 
-    sessions.MapPost("/{id:guid}/answers", async (Guid id, LearningAnswer answer, string? timeZone, HttpContext http, SessionStore store,
+    sessions.MapPost("/{id:guid}/answers", async (Guid id, LearningAnswer answer, HttpContext http, SessionStore store,
         CancellationToken cancellationToken) =>
     {
         if (!Guid.TryParse(http.Request.Headers["Idempotency-Key"].ToString(), out var key) || key == Guid.Empty)
@@ -339,7 +342,7 @@ static void MapLearningSessions(RouteGroupBuilder sessions, bool accountOwned)
         try
         {
             return await store.SubmitAsync(Owner(http.User), id, key, answer,
-                accountOwned ? BrowserTimeZone(timeZone) : null, cancellationToken) is { } result
+                accountOwned ? BrowserTimeZone(http) : null, cancellationToken) is { } result
                 ? Results.Ok(result)
                 : Problem(404, "session_not_found", "Nie znaleziono sesji.");
         }
