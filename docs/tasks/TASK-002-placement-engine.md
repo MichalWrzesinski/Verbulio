@@ -1,6 +1,6 @@
 # TASK-002 Adaptive placement engine
 
-Status: IN_PROGRESS
+Status: DONE
 
 ## Goal and scope
 
@@ -22,3 +22,5 @@ CP-001. Exercise the engine and synthetic scenarios with .NET tests. The complet
 ## Report
 
 The 49 .NET tests passed and the API built in Release. The scoring comparison and replay of typed answers use a pinned synthetic bank. The guest route, a reviewed vocabulary bank, PostgreSQL persistence and result claims remain separate subsequent increments.
+
+The integration review compares the synthetic engine and tests with the original placement review and verifies that the updated learning base retains its approved API, fixture and client code. The placement data version pins the spelling lexicon as well as the prompts. No calibration or guest-to-account verification is claimed for this increment.

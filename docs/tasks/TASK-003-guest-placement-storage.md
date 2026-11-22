@@ -1,6 +1,6 @@
 # TASK-003 Local guest placement persistence
 
-Status: IN_PROGRESS
+Status: DONE
 
 ## Goal
 
