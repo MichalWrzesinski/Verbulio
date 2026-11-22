@@ -39,7 +39,7 @@ a2-13	A2	a2-04	comfortable	wygodny	-	-	-	-	-	-
 a2-14	A2	a2-04	dangerous	niebezpieczny	-	-	-	-	-	-
 a2-15	A2	a2-04	quiet	cichy	-	-	-	-	low sound	-
 a2-16	A2	a2-04	expensive	drogi	-	-	-	-	-	-
-a2-17	A2	a2-05	to borrow	pożyczać od kogoś	borrows|borrowed	-	-	-	-	-
+a2-17	A2	a2-05	to borrow	pożyczać od kogoś	borrows|borrowed	-	pożyczać|pożyczyć od kogoś|pożyczyć	-	-	-
 a2-18	A2	a2-05	to repair	naprawiać	repairs|repaired	-	-	-	-	-
 a2-19	A2	a2-05	to invite	zapraszać	invites|invited	-	-	-	-	-
 a2-20	A2	a2-05	to pack	pakować	packs|packed	-	-	-	-	-
@@ -80,7 +80,7 @@ c1-02	C1	c1-01	constraint	ograniczenie	constraints	ograniczenia	-	-	-	-
 c1-03	C1	c1-01	discrepancy	rozbieżność	discrepancies	rozbieżności	-	-	-	-
 c1-04	C1	c1-01	rationale	uzasadnienie	rationales	uzasadnienia	-	-	-	-
 c1-05	C1	c1-02	to undermine	podważać	undermines|undermined	-	-	-	-	-
-c1-06	C1	c1-02	to mitigate	łagodzić	mitigates|mitigated	-	-	-	reduce harm	zmniejszać dotkliwość
+c1-06	C1	c1-02	to mitigate	łagodzić	mitigates|mitigated	-	-	alleviate|to alleviate	reduce harm	zmniejszać dotkliwość
 c1-07	C1	c1-02	to substantiate	popierać dowodami	substantiates|substantiated	-	-	-	with evidence	-
 c1-08	C1	c1-02	to anticipate	przewidywać	anticipates|anticipated	-	-	-	-	-
 c1-09	C1	c1-03	arbitrary	arbitralny	-	-	-	-	-	-

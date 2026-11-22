@@ -16,7 +16,7 @@ Exercise CP-001 with an editorially authored EN–PL bank in the local developme
 
 ## Verification
 
-CP-001, local placement segment. 52 .NET tests, Release API compilation and the isolated PostgreSQL integration passed. The added checks validate all 108 items through the placement engine, exercise a sense hint and inflection, and confirm the synthetic version can still replay. Chrome completed 20 questions using the pilot, including typed input, restart, resume and persisted result. The public account portion and validation with real learners remain pending.
+CP-001, local placement segment. 55 .NET tests, Release API compilation and the isolated PostgreSQL integration passed. The added checks validate all 108 items through the placement engine, exercise a sense hint, inflection and accepted typed translation variants, and confirm the synthetic version can still replay. Chrome completed 20 questions using the pilot, including typed input, restart, resume and persisted result. The public account portion and validation with real learners remain pending.
 
 ## Report
 

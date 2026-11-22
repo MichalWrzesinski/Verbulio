@@ -35,6 +35,22 @@ public sealed class PlacementBankDataTests
         Assert.DoesNotContain(verb.EnglishToPolish.Text, verb.PolishToEnglish.Translations);
     }
 
+    [Theory]
+    [InlineData("to borrow", "pożyczać", true)]
+    [InlineData("to borrow", "pożyczyć", true)]
+    [InlineData("łagodzić (zmniejszać dotkliwość)", "alleviate", false)]
+    public void TypedAnswersAcceptCommonVariantsForTheSelectedSense(string source, string answer, bool isPolish)
+    {
+        var prompts = LocalPlacementBank.Current.Items
+            .Select(item => isPolish ? item.EnglishToPolish : item.PolishToEnglish);
+        var prompt = Assert.Single(prompts, entry => entry.Text == source);
+        var evaluator = new AnswerEvaluator([]);
+
+        var result = evaluator.Assess(answer, prompt.Translations, prompt.InflectedForms, isPolish, false);
+
+        Assert.Equal(AnswerGrade.Correct, result.Grade);
+    }
+
     [Fact]
     public void ThePreviousBankStillReplaysByItsPinnedVersion()
     {
