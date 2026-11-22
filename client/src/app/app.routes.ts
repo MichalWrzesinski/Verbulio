@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { Landing } from './landing';
+import { learningRoutes } from './learning.routes';
 import { PendingPage } from './pending-page';
 
 export const routes: Routes = [
@@ -28,5 +29,6 @@ export const routes: Routes = [
     component: PendingPage,
     data: { heading: 'Polityka prywatności' },
   },
+  ...learningRoutes,
   { path: '**', redirectTo: '' },
 ];

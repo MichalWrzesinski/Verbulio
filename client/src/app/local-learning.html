@@ -1,0 +1,233 @@
+@if (question(); as question) {
+  @let result = feedback();
+  @let summary = session()!.summary;
+  <div class="app app--session">
+    <a class="skip" href="#tresc">Przejdź do ćwiczenia</a>
+    <header class="s-top">
+      <button
+        type="button"
+        class="key icon-btn"
+        aria-label="Przerwij sesję"
+        aria-haspopup="dialog"
+        [disabled]="busy()"
+        (click)="exitDialog.showModal()"
+      >
+        <svg class="i" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <path
+            d="M5.5 5.5l9 9M14.5 5.5l-9 9"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.6"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
+      <div class="prog">
+        <div
+          class="prog-bar"
+          role="progressbar"
+          aria-label="Opanowane słówka w sesji"
+          aria-valuemin="0"
+          [attr.aria-valuemax]="summary.wordCount"
+          [attr.aria-valuenow]="summary.wordsResolved"
+        >
+          <span
+            class="prog-fill"
+            [style.width.%]="(100 * summary.wordsResolved) / summary.wordCount"
+          ></span>
+        </div>
+        <span class="prog-t" aria-hidden="true"
+          >{{ summary.wordsResolved }} z {{ summary.wordCount }}</span
+        >
+      </div>
+    </header>
+    <main #main class="s-main" id="tresc" tabindex="-1">
+      <h1 class="sr">Sesja nauki</h1>
+      <div class="s-stage">
+        <div class="word-box comic-stage comic-stage--medium">
+          <img class="comic-portrait" src="assets/comic/medium.webp" alt="" />
+          <div class="comic-word">
+            <p class="word" [attr.lang]="targetLanguage() === 'pl' ? 'en' : 'pl'" id="q-word">
+              {{ question.text }}
+            </p>
+          </div>
+        </div>
+        @if (question.hint) {
+          <p class="word-sense">{{ question.hint }}</p>
+        }
+        <p class="hint-under" [class.sr]="question.mode === 'Choices'" id="q-hint">
+          {{ question.baseFormRetry ? 'Podaj formę podstawową.' : instruction() }}
+        </p>
+      </div>
+      @if (question.mode === 'Choices') {
+        <div class="s-answer">
+          <div class="tags-box">
+            <div class="tags tags--m" role="group" aria-labelledby="q-hint q-word">
+              @for (choice of question.choices; track choice; let index = $index) {
+                @let right = result?.correctTranslations?.includes(choice);
+                <button
+                  type="button"
+                  class="key tag"
+                  [attr.lang]="targetLanguage()"
+                  [disabled]="busy() || !!result || canRetry()"
+                  [class.locked]="!!result"
+                  [class.is-wrong]="!!result && selected() === index && !right"
+                  [class.is-correct]="!!result && selected() === index && !!right"
+                  [class.is-reveal]="!!result && selected() !== index && !!right"
+                  [class.is-out]="!!result && selected() !== index && !right"
+                  (click)="choose(index)"
+                >
+                  {{ choice }}
+                </button>
+              }
+            </div>
+          </div>
+        </div>
+      } @else {
+        <form class="s-answer" (submit)="write($event)">
+          <div class="field">
+            <label class="fld-l" for="answer">Tłumaczenie</label>
+            <div class="inp-box">
+              <input
+                class="key inp"
+                id="answer"
+                name="answer"
+                type="text"
+                [attr.lang]="targetLanguage()"
+                autocomplete="off"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
+                enterkeyhint="done"
+                maxlength="256"
+                [value]="typed()"
+                [readOnly]="busy() || !!result || canRetry()"
+                (input)="typed.set($any($event.target).value)"
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            class="key btn btn--primary"
+            [disabled]="!typed().trim() || busy() || !!result || canRetry()"
+          >
+            Sprawdź
+          </button>
+        </form>
+      }
+      @if (result) {
+        @let grade = result.assessment.grade;
+        <div
+          class="fb"
+          role="status"
+          [class.fb--ok]="grade === 'Correct'"
+          [class.fb--fix]="grade === 'CorrectWithSpelling'"
+          [class.fb--bad]="grade === 'Incorrect'"
+          [class.fb--hint]="grade === 'RetryWithBaseForm'"
+        >
+          <p class="fb-h">
+            @switch (grade) {
+              @case ('Correct') {
+                Dobrze!
+              }
+              @case ('CorrectWithSpelling') {
+                Dobrze, z poprawką
+              }
+              @case ('Incorrect') {
+                Nie tym razem
+              }
+              @case ('RetryWithBaseForm') {
+                Podaj formę podstawową
+              }
+            }
+          </p>
+          @if (result.correctTranslations.length) {
+            <dl class="fb-d">
+              <div>
+                <dt>Poprawna odpowiedź</dt>
+                <dd [attr.lang]="targetLanguage()">
+                  {{ result.assessment.suggestedSpelling ?? result.correctTranslations[0] }}
+                </dd>
+              </div>
+              @if (result.correctTranslations.length > 1) {
+                <div>
+                  <dt>Inne tłumaczenia</dt>
+                  <dd class="lite" [attr.lang]="targetLanguage()">
+                    {{ result.correctTranslations.join(', ') }}
+                  </dd>
+                </div>
+              }
+            </dl>
+          }
+          <button #next type="button" class="key btn btn--primary" (click)="advance()">
+            {{ grade === 'RetryWithBaseForm' ? 'Spróbuj ponownie' : 'Dalej' }}
+          </button>
+        </div>
+      }
+      @if (error()) {
+        <p class="fb fb--bad" role="alert">{{ error() }}</p>
+      }
+      @if (canRetry()) {
+        <button type="button" class="key btn btn--secondary" [disabled]="busy()" (click)="retry()">
+          Ponów zapis
+        </button>
+      }
+    </main>
+    <dialog #exitDialog class="dialog" aria-labelledby="exit-title">
+      <h2 id="exit-title">Przerwać sesję?</h2>
+      <p>Zapisane odpowiedzi zostaną uwzględnione w powtórkach.</p>
+      <div class="actions">
+        <button type="button" class="key btn btn--primary" (click)="exitDialog.close()">
+          Ćwicz dalej
+        </button>
+        <button type="button" class="key btn btn--secondary" (click)="end(exitDialog)">
+          Przerwij sesję
+        </button>
+      </div>
+    </dialog>
+  </div>
+} @else if (session(); as session) {
+  <div class="app">
+    <main #main class="focus-screen" tabindex="-1">
+      <section class="stack-l" role="status">
+        <h1 class="score">
+          <span class="score-n"
+            >{{ session.summary.firstTryCorrect }} z {{ session.summary.wordCount }}</span
+          >
+          <span class="score-t">słówek poprawnie przy pierwszej próbie</span>
+        </h1>
+        @if (!session.summary.completed) {
+          <p class="lead">Sesja przerwana. Powyżej widzisz wynik częściowy.</p>
+        }
+      </section>
+      <button type="button" class="key btn btn--primary" (click)="reset()">Gotowe</button>
+    </main>
+  </div>
+} @else {
+  <div class="site site--entry">
+    <header class="site-head">
+      <a class="brand" routerLink="/" aria-label="Verbulio, strona startowa">
+        <img src="brand/logo-full.svg" alt="" />
+      </a>
+    </header>
+    <main #main class="entry" tabindex="-1">
+      <h1 class="h1">Lokalna sesja nauki</h1>
+      <p>Trzy przykładowe słówka z zestawu testowego.</p>
+      <div class="actions">
+        <button type="button" class="key btn btn--primary" [disabled]="busy()" (click)="start()">
+          Ćwicz dalej
+        </button>
+      </div>
+      @if (error()) {
+        <p class="fb fb--bad" role="alert">{{ error() }}</p>
+      }
+    </main>
+  </div>
+}
+<footer class="legal-footer">
+  <p>Copyright 2026 Verbulio</p>
+  <nav aria-label="Dokumenty prawne">
+    <a class="link" routerLink="/regulamin">Regulamin</a>
+    <a class="link" routerLink="/prywatnosc">Polityka prywatności</a>
+  </nav>
+</footer>
