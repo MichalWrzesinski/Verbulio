@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Identity;
 using Npgsql;
 using Verbulio.Api;
 using Verbulio.Learning;
@@ -20,6 +21,8 @@ builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<SessionStore>();
 builder.Services.AddSingleton<GuestPlacementStore>();
+builder.Services.AddSingleton<RegistrationStore>();
+builder.Services.AddSingleton<IPasswordHasher<RegisteredAccount>, PasswordHasher<RegisteredAccount>>();
 builder.Services.AddProblemDetails();
 builder.Services.AddDataProtection()
     .SetApplicationName("Verbulio.LocalLearning")
@@ -129,6 +132,21 @@ sessions.MapPost("/{id:guid}/end", async (Guid id, ClaimsPrincipal user, Session
         : Problem(404, "session_not_found", "Nie znaleziono sesji.")).AddEndpointFilter(RequireLocalClient);
 
 app.MapLocalPlacement();
+
+app.MapPost("/api/v1/local-registration/accounts", async (
+    RegistrationRequest data, ClaimsPrincipal user, RegistrationStore store, CancellationToken cancellationToken) =>
+{
+    var registration = AccountRegistration.FromRequest(data);
+    if (registration is null)
+    {
+        return Problem(400, "invalid_registration", "Podaj poprawny adres e-mail i hasło od 12 do 128 znaków.");
+    }
+
+    var account = await store.RegisterAsync(Owner(user), registration, cancellationToken);
+    return account is null
+        ? Problem(409, "registration_unavailable", "Nie udało się utworzyć konta z tymi danymi.")
+        : Results.Json(account, statusCode: StatusCodes.Status201Created);
+}).RequireAuthorization().AddEndpointFilter(RequireLocalClient);
 
 if (args.Contains("--migrate", StringComparer.Ordinal))
 {

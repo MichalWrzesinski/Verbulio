@@ -2,7 +2,7 @@
 
 Verbulio gives Polish-speaking adults a few minutes of focused English vocabulary practice. The full public application also serves as a portfolio demo. The main path is landing page → 20-question adaptive placement test → result → account → first practice session. The placement label guides exercise selection. Learning uses both translation directions and alternates between four choices and typed answers based on the learner's history.
 
-Guests can resume their server-owned placement test. A completed result can be claimed by an account once. Account holders access their own practice history, categories, settings, progress, streaks and account lifecycle. Transactional email covers confirmation and password reset. Operator tools manage dictionary imports, exports and retention.
+Guests can resume their server-owned placement test. A completed result can be [claimed by an account once](registration.md). Account holders access their own practice history, categories, settings, progress, streaks and account lifecycle. Transactional email covers confirmation and password reset. Operator tools manage dictionary imports, exports and retention.
 
 Practice prioritizes due reviews, then unseen words at the user's level. A normal session targets ten distinct words and continues until each has been answered correctly. The first resolved answer per word governs the summary and the Leitner schedule, including retries and duplicate requests. A short category uses its actual number of available words. A paused or interrupted session does not increase the streak.
 
