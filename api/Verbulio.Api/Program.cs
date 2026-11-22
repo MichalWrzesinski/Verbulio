@@ -148,6 +148,13 @@ app.MapPost("/api/v1/local-registration/accounts", async (
         : Results.Json(account, statusCode: StatusCodes.Status201Created);
 }).RequireAuthorization().AddEndpointFilter(RequireLocalClient);
 
+app.MapGet("/api/v1/local-registration/outcomes/{placementTestId:guid}", async (
+    Guid placementTestId, ClaimsPrincipal user, RegistrationStore store, CancellationToken cancellationToken) =>
+    await store.ReadOutcomeAsync(Owner(user), placementTestId, cancellationToken) is { } account
+        ? Results.Ok(account)
+        : Problem(404, "registration_not_found", "Brak zapisanego konta dla tego testu."))
+    .RequireAuthorization();
+
 if (args.Contains("--migrate", StringComparer.Ordinal))
 {
     var dataSource = app.Services.GetRequiredService<NpgsqlDataSource>();

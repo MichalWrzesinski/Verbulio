@@ -161,6 +161,10 @@ def exercise_registration(owner, other, anonymous, resource):
     email_base = uuid.uuid4().hex
     data = registration_data(resource, email_base + "@example.invalid")
     candidate = {**data, "email": "second-" + data["email"]}
+    outcome = f"/api/v1/local-registration/outcomes/{data['placementTestId']}"
+    anonymous.request(outcome, 401)
+    other.request(outcome, 404)
+    owner.request(outcome, 404)
     anonymous.request(REGISTRATION, 401, "POST", data)
     denied = other.request(REGISTRATION, 409, "POST", data)
     def signature(problem):
@@ -181,6 +185,8 @@ def exercise_registration(owner, other, anonymous, resource):
     account = responses[winner]
     assert {"id", "startingLevel"} == account.keys()
     assert account["startingLevel"] == owner.request(resource)["test"]["result"] == "A1"
+    assert owner.request(outcome) == account
+    other.request(outcome, 404)
     assert signature(responses[1 - winner]) == signature(denied)
     assert signature(owner.request(REGISTRATION, 409, "POST", data)) == signature(denied)
     owner.request(resource + "/restart", 404, "POST")

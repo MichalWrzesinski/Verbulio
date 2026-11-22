@@ -9,6 +9,22 @@ internal sealed record RegisteredAccount(Guid Id, VocabularyLevel StartingLevel)
 internal sealed class RegistrationStore(
     NpgsqlDataSource dataSource, IPasswordHasher<RegisteredAccount> passwordHasher, TimeProvider timeProvider)
 {
+    internal async Task<RegisteredAccount?> ReadOutcomeAsync(Guid guest, Guid placementTestId, CancellationToken cancellationToken)
+    {
+        await using var query = dataSource.CreateCommand("""
+            SELECT accounts.id, accounts.starting_level
+            FROM accounts
+            JOIN guest_placement_tests ON guest_placement_tests.id = accounts.placement_test_id
+            WHERE guest_placement_tests.guest_id = $1 AND accounts.placement_test_id = $2
+            """);
+        query.Parameters.AddWithValue(guest);
+        query.Parameters.AddWithValue(placementTestId);
+        await using var reader = await query.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken)
+            ? new RegisteredAccount(reader.GetGuid(0), (VocabularyLevel)reader.GetInt32(1))
+            : null;
+    }
+
     internal async Task<RegisteredAccount?> RegisterAsync(Guid guest, AccountRegistration request,
         CancellationToken cancellationToken)
     {
