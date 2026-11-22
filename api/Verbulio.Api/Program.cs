@@ -49,27 +49,30 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 }).AddCookie(accountScheme, options =>
 {
     options.Cookie.Name = "verbulio.local-account";
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.HttpOnly = true;
     options.ExpireTimeSpan = AccountSessions.Lifetime;
     options.SlidingExpiration = false;
     options.Events.OnRedirectToLogin = context =>
     {
+        AccountSecurityEvents.SessionDenied(context.HttpContext.RequestServices.GetRequiredService<ILogger<AccountSessions>>());
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         return Task.CompletedTask;
     };
     options.Events.OnValidatePrincipal = async context =>
     {
         var store = context.HttpContext.RequestServices.GetRequiredService<AccountSessions>();
-        if (SessionId(context.Principal) is not { } id
-            || await store.ReadAsync(id, context.HttpContext.RequestAborted) is not { } user)
+        var id = SessionId(context.Principal);
+        if (id is { } presented) context.HttpContext.Items[AccountSessions.IdClaim] = presented;
+        if (id is null || await store.ReadAsync(id.Value, context.HttpContext.RequestAborted) is not { } user)
         {
             context.RejectPrincipal();
             return;
         }
 
         context.ReplacePrincipal(new ClaimsPrincipal(new ClaimsIdentity(
-            [new Claim(AccountSessions.IdClaim, id.ToString()),
+            [new Claim(AccountSessions.IdClaim, id.Value.ToString()),
              new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
              new Claim(AccountSessions.LevelClaim, user.StartingLevel.ToString())], accountScheme)));
     };
@@ -84,6 +87,11 @@ builder.Services.AddSingleton(_ => PartitionedRateLimiter.Create<string, string>
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = (context, _) =>
+    {
+        AccountSecurityEvents.LoginLimited(context.HttpContext.RequestServices.GetRequiredService<ILogger<AccountSessions>>());
+        return ValueTask.CompletedTask;
+    };
     options.AddPolicy(loginLimit, context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? string.Empty,
         _ => new FixedWindowRateLimiterOptions
@@ -207,10 +215,14 @@ app.MapGet("/api/v1/local-registration/outcomes/{placementTestId:guid}", async (
         : Problem(404, "registration_not_found", "Brak zapisanego konta dla tego testu."))
     .RequireAuthorization();
 
-var account = app.MapGroup("/api/v1/local-account");
+var account = app.MapGroup("/api/v1/local-account")
+    .AddEndpointFilter((context, next) => context.HttpContext.Request.IsHttps
+        ? next(context)
+        : ValueTask.FromResult<object?>(Problem(400, "secure_connection_required", "Wymagane jest połączenie HTTPS.")));
 var accountOnly = new AuthorizeAttribute { AuthenticationSchemes = accountScheme };
 account.MapPost("/login", async (LoginRequest request, HttpContext http, AccountCredentials credentials,
-    AccountSessions store, PartitionedRateLimiter<string> emailLimiter, CancellationToken cancellationToken) =>
+    AccountSessions store, PartitionedRateLimiter<string> emailLimiter, ILogger<AccountSessions> logger,
+    CancellationToken cancellationToken) =>
 {
     var key = request.Email?.Trim() is { Length: > 0 and <= 254 } email
         ? AccountRegistration.NormalizeEmail(email)
@@ -218,17 +230,26 @@ account.MapPost("/login", async (LoginRequest request, HttpContext http, Account
     using var attempt = await emailLimiter.AcquireAsync(key, 1, cancellationToken);
     if (!attempt.IsAcquired)
     {
+        AccountSecurityEvents.LoginLimited(logger);
         return Problem(429, "login_rate_limited", "Za dużo prób logowania. Spróbuj ponownie za chwilę.");
     }
 
     var user = await credentials.VerifyAsync(request, cancellationToken);
     if (user is null)
     {
+        AccountSecurityEvents.LoginRejected(logger);
         return Problem(401, "invalid_credentials", "Nieprawidłowy e-mail lub hasło.");
     }
 
-    var existing = await http.AuthenticateAsync(accountScheme);
-    var session = await store.ReplaceAsync(user.Id, SessionId(existing.Principal), cancellationToken);
+    await http.AuthenticateAsync(accountScheme);
+    var previous = http.Items[AccountSessions.IdClaim] is Guid id ? id : (Guid?)null;
+    var session = await store.ReplaceAsync(user.Id, previous, cancellationToken);
+    if (session is null)
+    {
+        await http.SignOutAsync(accountScheme);
+        return Problem(409, "session_rotation_conflict", "Sesja uległa zmianie. Spróbuj ponownie.");
+    }
+
     var identity = new ClaimsIdentity([new Claim(AccountSessions.IdClaim, session.Id.ToString())], accountScheme);
     await http.SignInAsync(accountScheme, new ClaimsPrincipal(identity),
         new AuthenticationProperties { ExpiresUtc = session.ExpiresAt });
