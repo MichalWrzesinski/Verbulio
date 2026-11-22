@@ -323,6 +323,11 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     guest.request(IDENTITY, 204, "POST")
     guest.request(ACCOUNT_LEARNING, 401, "POST")
     anonymous.request(ACCOUNT_LEARNING, 401, "POST")
+    profile_path = ACCOUNT + "/profile"
+    guest.request(profile_path, 401)
+    anonymous.request(profile_path, 401)
+    fresh_profile = {"startingLevel": "A1", "newWords": 24, "learningWords": 0, "masteredWords": 0}
+    assert owner.request(profile_path) == fresh_profile
     categories_path = ACCOUNT + "/learning/categories"
     guest.request(categories_path, 401)
     anonymous.request(categories_path, 401)
@@ -346,6 +351,8 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     assert food_words == {"a1-03", "a1-06", "a1-10", "a1-14", "a1-15"}, food_words
     assert food["category"] == "jedzenie"
     assert food["summary"] == {"firstTryCorrect": 5, "wordCount": 5, "wordsResolved": 5, "completed": True}
+    food_profile = fresh_profile | {"newWords": 19, "learningWords": 5}
+    assert owner.request(profile_path) == food_profile
     assert owner.request(food_path, 409, "POST")["code"] == "no_words_available"
     assert {"id": "jedzenie", "title": "Jedzenie", "availableWords": 0} in owner.request(categories_path)
 
@@ -356,6 +363,9 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
 
     assert other.request(ACCOUNT + "/login", 200, "POST",
                          {"email": other_email, "password": login["password"]}) == other_account
+    assert other.request(profile_path) == {
+        "startingLevel": "C2", "newWords": 16, "learningWords": 0, "masteredWords": 0,
+    }
     for browser, denied in [(guest, 401), (anonymous, 401), (other, 404)]:
         browser.request(resource, denied)
         browser.request(resource + "/answers", denied, "POST", submission, str(uuid.uuid4()))
@@ -373,7 +383,9 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     current = result["session"]
     owner.request(ACCOUNT + "/logout", 204, "POST")
     owner.request(resource, 401)
+    owner.request(profile_path, 401)
     assert owner.request(ACCOUNT + "/login", 200, "POST", login) == account
+    assert owner.request(profile_path) == food_profile | {"newWords": 18, "learningWords": 6}
     assert owner.request(resource) == current
     assert owner.request(ACCOUNT_LEARNING, method="POST") == current
 

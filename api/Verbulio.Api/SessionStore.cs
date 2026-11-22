@@ -13,6 +13,7 @@ internal sealed record WordState(string Id, TranslationDirection Direction, Answ
 }
 
 internal sealed record StoredAnswer(Guid Id, LearningAnswer Answer, DateTimeOffset AnsweredAt);
+internal sealed record ProfileProgressView(VocabularyLevel StartingLevel, int NewWords, int LearningWords, int MasteredWords);
 internal sealed record SessionView(Guid Id, LearningQuestion? Question, LearningSummary Summary, string? Category, string? CategoryTitle);
 internal sealed record CategoryView(string Id, string Title, int AvailableWords);
 internal sealed record AnswerView(LearningFeedback Feedback, SessionView Session);
@@ -83,6 +84,20 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
         await insert.ExecuteNonQueryAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return View(sessionId, state.Reconstitute(), state.Category);
+    }
+
+    internal async Task<ProfileProgressView> ProfileProgressAsync(Guid owner, VocabularyLevel startingLevel,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        var progress = await ReadProgressAsync(owner, connection, null, cancellationToken);
+        var levelWords = LearningCatalog.Pilot.Levels
+            .Where(item => item.Value == startingLevel)
+            .Select(item => item.Key)
+            .ToArray();
+        var tracked = levelWords.Where(progress.ContainsKey).ToArray();
+        var mastered = tracked.Count(id => progress[id].Review?.Box == ReviewBox.Mastered);
+        return new(startingLevel, levelWords.Length - tracked.Length, tracked.Length - mastered, mastered);
     }
 
     internal async Task<CategoryView[]> CategoriesAsync(Guid owner, VocabularyLevel startingLevel,
