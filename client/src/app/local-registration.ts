@@ -42,6 +42,8 @@ export class LocalRegistration {
   protected readonly saving = signal(false);
   protected readonly cannotRegister = signal(false);
   protected readonly error = signal('');
+  protected readonly passwordError = signal('');
+  protected readonly invalidFields = signal(false);
   protected readonly email = signal('');
   protected readonly password = signal('');
   protected readonly passwordVisible = signal(false);
@@ -66,14 +68,16 @@ export class LocalRegistration {
     const form = new FormData(event.currentTarget);
     this.email.set(String(form.get('email') ?? ''));
     this.password.set(String(form.get('password') ?? ''));
+    this.error.set('');
+    this.passwordError.set('');
+    this.invalidFields.set(false);
     const size = [...this.password()].length;
     if (size < 12 || size > 128) {
-      this.error.set('Hasło musi mieć od 12 do 128 znaków.');
+      this.passwordError.set('Hasło musi mieć od 12 do 128 znaków.');
       return;
     }
 
     this.saving.set(true);
-    this.error.set('');
     void this.save(placement.id);
   }
 
@@ -82,8 +86,10 @@ export class LocalRegistration {
       const current = await firstValueFrom(
         this.http.post<CompletedPlacement>('/api/v1/local-placement/tests', null, options),
       );
+      const account = current.test.result ? await this.readOutcome(current.id) : null;
       this.placement.set(current);
       this.cannotRegister.set(!current.test.result);
+      if (account) this.showAccount(account);
     } catch (error) {
       if (error instanceof HttpErrorResponse && error.status === 401) {
         this.cannotRegister.set(true);
@@ -105,10 +111,7 @@ export class LocalRegistration {
           options,
         ),
       );
-      this.password.set('');
-      this.passwordVisible.set(false);
-      this.account.set(account);
-      this.focusHeading();
+      this.showAccount(account);
     } catch (error) {
       if (error instanceof HttpErrorResponse && error.status === 401) {
         this.password.set('');
@@ -118,15 +121,51 @@ export class LocalRegistration {
         return;
       }
 
-      const problem = error instanceof HttpErrorResponse ? error.error : null;
+      if (error instanceof HttpErrorResponse && error.status === 400) {
+        this.invalidFields.set(true);
+        this.error.set('Sprawdź adres e-mail i długość hasła.');
+        return;
+      }
+
+      try {
+        const account = await this.readOutcome(placementTestId);
+        if (account) {
+          this.showAccount(account);
+          return;
+        }
+      } catch {
+        // The account could have been committed even if the outcome request also failed.
+      }
+
       this.error.set(
-        typeof problem?.title === 'string'
-          ? problem.title
-          : 'Nie udało się zapisać konta. Spróbuj ponownie.',
+        error instanceof HttpErrorResponse && error.status === 409
+          ? 'Nie udało się utworzyć konta z tymi danymi.'
+          : 'Nie udało się potwierdzić zapisu konta. Możesz ponowić próbę.',
       );
     } finally {
       this.saving.set(false);
     }
+  }
+
+  private async readOutcome(placementTestId: string): Promise<RegisteredAccount | null> {
+    try {
+      return await firstValueFrom(
+        this.http.get<RegisteredAccount>(
+          `/api/v1/local-registration/outcomes/${placementTestId}`,
+          options,
+        ),
+      );
+    } catch (error) {
+      if (error instanceof HttpErrorResponse && error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  private showAccount(account: RegisteredAccount): void {
+    this.password.set('');
+    this.passwordVisible.set(false);
+    this.account.set(account);
+    this.focusHeading();
   }
 
   private focusHeading(): void {

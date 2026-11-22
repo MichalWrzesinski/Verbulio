@@ -47,7 +47,8 @@
                 spellcheck="false"
                 maxlength="254"
                 required
-                aria-describedby="email-h"
+                [attr.aria-describedby]="invalidFields() ? 'email-h registration-error' : 'email-h'"
+                [attr.aria-invalid]="invalidFields() || null"
                 [value]="email()"
                 [readOnly]="saving()"
                 (input)="email.set(emailInput.value)"
@@ -67,7 +68,14 @@
                 autocomplete="new-password"
                 maxlength="256"
                 required
-                aria-describedby="pwd-h"
+                [attr.aria-describedby]="
+                  passwordError()
+                    ? 'pwd-h password-error'
+                    : invalidFields()
+                      ? 'pwd-h registration-error'
+                      : 'pwd-h'
+                "
+                [attr.aria-invalid]="!!passwordError() || invalidFields() || null"
                 [value]="password()"
                 [readOnly]="saving()"
                 (input)="password.set(passwordInput.value)"
@@ -85,8 +93,11 @@
               </span>
             </div>
           </div>
+          @if (passwordError()) {
+            <p class="fb fb--bad" id="password-error" role="alert">{{ passwordError() }}</p>
+          }
           @if (error()) {
-            <p class="fb fb--bad" role="alert">{{ error() }}</p>
+            <p class="fb fb--bad" id="registration-error" role="alert">{{ error() }}</p>
           }
           <button type="submit" class="key btn btn--primary" [disabled]="saving()">
             {{ saving() ? 'Zapisuję konto…' : 'Załóż konto' }}
