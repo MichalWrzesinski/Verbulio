@@ -113,13 +113,7 @@ export class LocalRegistration {
       );
       this.showAccount(account);
     } catch (error) {
-      if (error instanceof HttpErrorResponse && error.status === 401) {
-        this.password.set('');
-        this.passwordVisible.set(false);
-        this.cannotRegister.set(true);
-        this.focusHeading();
-        return;
-      }
+      if (this.handleExpiredIdentity(error)) return;
 
       if (error instanceof HttpErrorResponse && error.status === 400) {
         this.invalidFields.set(true);
@@ -133,7 +127,8 @@ export class LocalRegistration {
           this.showAccount(account);
           return;
         }
-      } catch {
+      } catch (outcomeError) {
+        if (this.handleExpiredIdentity(outcomeError)) return;
         // The account could have been committed even if the outcome request also failed.
       }
 
@@ -145,6 +140,16 @@ export class LocalRegistration {
     } finally {
       this.saving.set(false);
     }
+  }
+
+  private handleExpiredIdentity(error: unknown): boolean {
+    if (!(error instanceof HttpErrorResponse) || error.status !== 401) return false;
+
+    this.password.set('');
+    this.passwordVisible.set(false);
+    this.cannotRegister.set(true);
+    this.focusHeading();
+    return true;
   }
 
   private async readOutcome(placementTestId: string): Promise<RegisteredAccount | null> {
