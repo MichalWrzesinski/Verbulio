@@ -9,3 +9,9 @@ Use a modular monolith with server-owned placement results, sessions, review sch
 Before staging, confirm PostgreSQL persistence, a restore drill, scheduled retention and an approved transactional email transport. Use local capture for email development. Hosting, email delivery to real addresses and publication have separate prerequisites.
 
 The learning slice uses .NET SDK 10.0.404, Npgsql and PostgreSQL 18 for local development and integration checks. Development cookie identities and their local data protection keys are isolated from the future account module.
+
+## Staging and email
+
+The owner provides an existing VPS at `151.240.121.172`. The expected installation directory is `/srv/Verbulio` and it currently serves a placeholder. The path, existing TLS configuration, and deploy access remain to be verified on the host. Plan a reversible cutover preserving the placeholder until the staging release is verified. Record environment details in the deployment configuration when preparing the staging release.
+
+Use Brevo for transactional mail when the account workflow needs delivery. The owner confirmed that the sender `verbulio@gitpush.app` is configured and was tested on the VPS. Local and CI checks use captured mail. The application-specific Brevo credentials, integration and delivery test are still pending. Deployment may proceed when staging is needed for verification within the approved infrastructure scope.
