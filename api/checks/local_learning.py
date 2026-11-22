@@ -20,6 +20,7 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 SESSION = "/api/v1/local-learning/sessions"
 IDENTITY = "/api/v1/local-learning/identity"
+PLACEMENT = "/api/v1/local-placement/tests"
 REGISTRATION = "/api/v1/local-registration/accounts"
 ACCOUNT_LEARNING = "/api/v1/local-account/learning/sessions"
 ACCOUNT = "/api/v1/local-account"
@@ -353,6 +354,17 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     assert food["summary"] == {"firstTryCorrect": 5, "wordCount": 5, "wordsResolved": 5, "completed": True}
     food_profile = fresh_profile | {"newWords": 19, "learningWords": 5}
     assert owner.request(profile_path) == food_profile
+
+    peer = Browser(owner.base, owner.tls)
+    peer.request(IDENTITY, 204, "POST")
+    placement = peer.request(PLACEMENT, method="POST")
+    placement_resource = f"{PLACEMENT}/{placement['id']}"
+    skip_placement(peer, placement_resource)
+    peer_registration = registration_data(placement_resource, uuid.uuid4().hex + "@example.invalid")
+    peer_account = peer.request(REGISTRATION, 201, "POST", peer_registration)
+    peer_login = {field: peer_registration[field] for field in ("email", "password")}
+    assert peer.request(ACCOUNT + "/login", 200, "POST", peer_login) == peer_account
+    assert peer.request(profile_path) == fresh_profile
     assert owner.request(food_path, 409, "POST")["code"] == "no_words_available"
     assert {"id": "jedzenie", "title": "Jedzenie", "availableWords": 0} in owner.request(categories_path)
 
