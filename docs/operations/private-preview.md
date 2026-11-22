@@ -14,13 +14,13 @@ Record the archive checksum before transfer and verify it after transfer. The ar
 
 ## Deploy from GitHub Actions
 
-Use **Deploy private preview** from main with the ID of a successful CI push run on main. The workflow verifies the package revision, sends the package and Compose configuration over pinned SSH, migrates the preview database, starts the service and checks its HTTPS health endpoint. Use the same workflow with a prior compatible candidate if the app must be rolled back. Verify database restoration separately before reverting across an incompatible schema change.
+Use **Deploy private preview** from main with the ID of a successful CI push run on main. The workflow verifies the package revision, sends the package and Compose configuration over pinned SSH, migrates the preview database, starts the service and checks its HTTPS health endpoint. If the candidate fails to start or pass health checks, the deployment attempts to reactivate the preceding healthy app release from retained server files and otherwise stops the app. It does not roll back database changes. To select a prior compatible release intentionally, use the workflow with its CI run while the artifact is retained, or rerun that main CI run to rebuild the artifact. Verify database restoration separately before reverting across an incompatible schema change.
 
 Provision `/srv/Verbulio-preview` for the dedicated `deploy-verbulio` user. Give that account access to Docker as for the other application deploy accounts on the VPS. Install a dedicated restricted SSH public key for the account and store its private half as the Actions secret `PREVIEW_SSH_KEY`. This model gives the deploy key administrative-equivalent access to the Docker host. Keep it exclusive to this private repository and rotate it independently. The operator provisions the account once. All application files travel via GitHub Actions.
 
 The preview uses a dedicated persistent PostgreSQL volume and persistent TLS and cookie keys. The application and database listen on host IPv4 loopback only. Keep both services off public listeners and the public reverse proxy. The preview uses test accounts and does not send email.
 
-From a machine with authorized operator SSH access, forward the port and visit `https://127.0.0.1:5443/` with the preview certificate trusted.
+From a machine with authorized operator SSH access, forward the port and visit `https://127.0.0.1:5443/` with the preview certificate trusted. Copy the replacement public certificate after a deployment reports renewal.
 
 ```sh
 ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:5443:127.0.0.1:5443 webhome-vps
