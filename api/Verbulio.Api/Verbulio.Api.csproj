@@ -3,5 +3,7 @@
     <PackageReference Include="Npgsql" Version="10.0.3" />
     <ProjectReference Include="../Verbulio.Learning/Verbulio.Learning.csproj" />
     <EmbeddedResource Include="Migrations/*.sql" />
+    <EmbeddedResource Include="Dictionary/*.tsv" />
+    <InternalsVisibleTo Include="Verbulio.Learning.Tests" />
   </ItemGroup>
 </Project>

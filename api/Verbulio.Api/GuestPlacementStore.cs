@@ -99,7 +99,7 @@ internal sealed class GuestPlacementStore(NpgsqlDataSource dataSource)
     private static async Task<GuestPlacementView> InsertAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
         Guid guest, CancellationToken cancellationToken)
     {
-        var bank = LocalPlacementBank.Instance;
+        var bank = LocalPlacementBank.Current;
         var id = Guid.NewGuid();
         var seed = Random.Shared.Next();
         await using var insert = new NpgsqlCommand("""
@@ -147,11 +147,7 @@ internal sealed class GuestPlacementStore(NpgsqlDataSource dataSource)
 
     private static PlacementTest Replay(SavedTest saved)
     {
-        var bank = LocalPlacementBank.Instance;
-        if (saved.BankVersion != bank.Version)
-        {
-            throw new InvalidOperationException("Unsupported placement bank version.");
-        }
+        var bank = LocalPlacementBank.Resolve(saved.BankVersion);
 
         var test = new PlacementTest(bank, saved.Seed);
         foreach (var submission in saved.Submissions)
