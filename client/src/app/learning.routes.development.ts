@@ -7,6 +7,11 @@ export const learningRoutes: Routes = [
     loadComponent: () => import('./local-placement').then((module) => module.LocalPlacement),
   },
   {
+    path: 'rejestracja',
+    title: 'Załóż konto · Verbulio',
+    loadComponent: () => import('./local-registration').then((module) => module.LocalRegistration),
+  },
+  {
     path: 'lokalna-nauka',
     title: 'Sesja nauki · Verbulio',
     loadComponent: () => import('./local-learning').then((module) => module.LocalLearning),
