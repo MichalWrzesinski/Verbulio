@@ -1,0 +1,105 @@
+<div class="app">
+  <header class="form-top">
+    <a class="link back" routerLink="/">
+      <svg class="i" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path
+          d="M12.5 4.5L7 10l5.5 5.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+      Wróć
+    </a>
+  </header>
+  <main class="stack-l">
+    @if (account(); as signedIn) {
+      <h1 #heading class="h1" tabindex="-1">Jesteś zalogowany</h1>
+      <p class="lead">Twój poziom początkowy to {{ signedIn.startingLevel }}.</p>
+      @if (error()) {
+        <p class="fb fb--bad" role="alert">{{ error() }}</p>
+      }
+      <button type="button" class="key btn btn--primary" [disabled]="busy()" (click)="logout()">
+        {{ busy() ? 'Wylogowuję…' : 'Wyloguj się' }}
+      </button>
+    } @else {
+      <h1 #heading class="h1" tabindex="-1">Zaloguj się</h1>
+      @if (!secure) {
+        <p class="lead">Uruchom lokalne środowisko przez HTTPS, aby się zalogować.</p>
+      } @else if (loading()) {
+        <p role="status">Sprawdzam sesję</p>
+      } @else {
+        <form class="form" (submit)="login($event)">
+          <div class="field">
+            <label class="fld-l" for="email">Adres <span class="nw">e-mail</span></label>
+            <div class="inp-box">
+              <input
+                class="key inp"
+                id="email"
+                name="email"
+                type="email"
+                autocomplete="username"
+                inputmode="email"
+                autocapitalize="none"
+                spellcheck="false"
+                maxlength="254"
+                required
+                [readOnly]="busy()"
+                [attr.aria-invalid]="rejected() || null"
+                [attr.aria-describedby]="rejected() ? 'login-error' : null"
+              />
+            </div>
+          </div>
+          <div class="field">
+            <label class="fld-l" for="pwd">Hasło</label>
+            <div class="inp-box">
+              <input
+                class="key inp inp--pad"
+                id="pwd"
+                name="password"
+                [type]="visible() ? 'text' : 'password'"
+                autocomplete="current-password"
+                maxlength="256"
+                required
+                [readOnly]="busy()"
+                [attr.aria-invalid]="rejected() || null"
+                [attr.aria-describedby]="rejected() ? 'login-error' : null"
+              />
+              <span class="in-btn">
+                <button
+                  type="button"
+                  class="link"
+                  aria-controls="pwd"
+                  [disabled]="busy()"
+                  [attr.aria-label]="visible() ? 'Ukryj hasło' : 'Pokaż hasło'"
+                  (click)="visible.set(!visible())"
+                >
+                  {{ visible() ? 'Ukryj' : 'Pokaż' }}
+                </button>
+              </span>
+            </div>
+          </div>
+          @if (error()) {
+            <p id="login-error" class="fb fb--bad" role="alert">{{ error() }}</p>
+          }
+          <button type="submit" class="key btn btn--primary" [disabled]="busy()">
+            {{ busy() ? 'Loguję…' : 'Zaloguj się' }}
+          </button>
+        </form>
+        <p class="small">
+          Nie masz konta? Najpierw <a routerLink="/test">sprawdź swój poziom</a>, a konto założysz z
+          wynikiem.
+        </p>
+      }
+    }
+  </main>
+</div>
+<footer class="legal-footer">
+  <p>Copyright 2026 Verbulio</p>
+  <nav aria-label="Dokumenty prawne">
+    <a class="link" routerLink="/regulamin">Regulamin</a>
+    <a class="link" routerLink="/prywatnosc">Polityka prywatności</a>
+  </nav>
+</footer>
