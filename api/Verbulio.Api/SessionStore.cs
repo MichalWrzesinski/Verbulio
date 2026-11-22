@@ -13,10 +13,10 @@ internal sealed record WordState(string Id, TranslationDirection Direction, Answ
 }
 
 internal sealed record StoredAnswer(Guid Id, LearningAnswer Answer, DateTimeOffset AnsweredAt);
-internal sealed record SessionView(Guid Id, LearningQuestion? Question, LearningSummary Summary);
+internal sealed record SessionView(Guid Id, LearningQuestion? Question, LearningSummary Summary, string? Category);
 internal sealed record AnswerView(LearningFeedback Feedback, SessionView Session);
 
-internal sealed record SessionState(int Version, int Seed, WordState[] Words, List<StoredAnswer> Answers, bool Ended)
+internal sealed record SessionState(int Version, int Seed, WordState[] Words, List<StoredAnswer> Answers, bool Ended, string? Category = null)
 {
     internal LearningSession Reconstitute()
     {
@@ -38,7 +38,8 @@ internal sealed record SessionState(int Version, int Seed, WordState[] Words, Li
 
 internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider timeProvider)
 {
-    internal async Task<SessionView?> StartAsync(Guid owner, VocabularyLevel? startingLevel, CancellationToken cancellationToken)
+    internal async Task<SessionView?> StartAsync(Guid owner, VocabularyLevel? startingLevel, LearningCategory? category,
+        CancellationToken cancellationToken)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
@@ -55,7 +56,8 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
             await using var reader = await existing.ExecuteReaderAsync(cancellationToken);
             if (await reader.ReadAsync(cancellationToken))
             {
-                return View(reader.GetGuid(0), Deserialize(reader.GetString(1)).Reconstitute());
+                var active = Deserialize(reader.GetString(1));
+                return View(reader.GetGuid(0), active.Reconstitute(), active.Category);
             }
         }
 
@@ -77,6 +79,7 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
         var seed = Random.Shared.Next();
         var catalog = startingLevel is null ? LearningCatalog.Fixture : LearningCatalog.Pilot;
         var candidates = catalog.Words.Values
+            .Where(word => category is null || category.WordIds.Contains(word.Id))
             .Where(word => startingLevel is null || catalog.Levels[word.Id] == startingLevel || progress.ContainsKey(word.Id))
             .Select(word => progress.TryGetValue(word.Id, out var saved) ? saved.ToSessionWord(catalog) : word);
         var selected = SessionSelection.Select(candidates, timeProvider.GetUtcNow(), seed);
@@ -87,7 +90,7 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
 
         var sessionId = Guid.NewGuid();
         var state = new SessionState(catalog.Version, seed,
-            selected.Select(word => new WordState(word.Id, word.NextDirection, word.NextMode, word.Review)).ToArray(), [], false);
+            selected.Select(word => new WordState(word.Id, word.NextDirection, word.NextMode, word.Review)).ToArray(), [], false, category?.Id);
         await using var insert = new NpgsqlCommand(
             "INSERT INTO learning_sessions (id, owner_id, active, state) VALUES ($1, $2, true, $3)", connection, transaction);
         insert.Parameters.AddWithValue(sessionId);
@@ -95,14 +98,14 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
         insert.Parameters.AddWithValue(NpgsqlDbType.Jsonb, JsonSerializer.Serialize(state));
         await insert.ExecuteNonQueryAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return View(sessionId, state.Reconstitute());
+        return View(sessionId, state.Reconstitute(), state.Category);
     }
 
     internal async Task<SessionView?> ReadAsync(Guid owner, Guid id, CancellationToken cancellationToken)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         var state = await LoadAsync(connection, null, owner, id, cancellationToken);
-        return state is null ? null : View(id, state.Reconstitute());
+        return state is null ? null : View(id, state.Reconstitute(), state.Category);
     }
 
     internal async Task<AnswerView?> SubmitAsync(Guid owner, Guid id, Guid key, LearningAnswer answer,
@@ -133,7 +136,7 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
             await transaction.CommitAsync(cancellationToken);
         }
 
-        return new AnswerView(feedback, View(id, session));
+        return new AnswerView(feedback, View(id, session, state.Category));
     }
 
     internal async Task<SessionView?> EndAsync(Guid owner, Guid id, CancellationToken cancellationToken)
@@ -150,7 +153,7 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
         session.End();
         await SaveAsync(connection, transaction, owner, id, state with { Ended = true }, false, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return View(id, session);
+        return View(id, session, state.Category);
     }
 
     private static async Task<SessionState?> LoadAsync(NpgsqlConnection connection, NpgsqlTransaction? transaction,
@@ -200,7 +203,8 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static SessionView View(Guid id, LearningSession session) => new(id, session.CurrentQuestion, session.Summary);
+    private static SessionView View(Guid id, LearningSession session, string? category) =>
+        new(id, session.CurrentQuestion, session.Summary, category);
 
     private static SessionState Deserialize(string json) =>
         JsonSerializer.Deserialize<SessionState>(json) ?? throw new InvalidOperationException("Missing session state.");

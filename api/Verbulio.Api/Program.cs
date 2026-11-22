@@ -171,6 +171,9 @@ var account = app.MapGroup("/api/v1/local-account")
         ? next(context)
         : ValueTask.FromResult<object?>(Problem(400, "secure_connection_required", "Wymagane jest połączenie HTTPS.")));
 var accountOnly = new AuthorizeAttribute { AuthenticationSchemes = accountScheme };
+account.MapGet("/learning/categories", () =>
+    Results.Ok(LearningCategory.All.Select(category => new { category.Id, category.Title })))
+    .RequireAuthorization(accountOnly);
 MapLearningSessions(account.MapGroup("/learning/sessions").RequireAuthorization(accountOnly), accountOwned: true);
 account.MapPost("/login", async (LoginRequest request, HttpContext http, AccountCredentials credentials,
     AccountSessions store, PartitionedRateLimiter<string> emailLimiter, ILogger<AccountSessions> logger,
@@ -262,11 +265,22 @@ static VocabularyLevel StartingLevel(ClaimsPrincipal user) =>
 
 static void MapLearningSessions(RouteGroupBuilder sessions, bool accountOwned)
 {
-    sessions.MapPost("", async (ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
+    sessions.MapPost("", async (string? category, ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
     {
-        var session = await store.StartAsync(Owner(user), accountOwned ? StartingLevel(user) : null, cancellationToken);
+        var selectedCategory = accountOwned && category is not null
+            ? LearningCategory.All.SingleOrDefault(item => item.Id == category)
+            : null;
+        if (accountOwned && category is not null && selectedCategory is null)
+        {
+            return Problem(404, "category_not_found", "Nie znaleziono kategorii.");
+        }
+
+        var session = await store.StartAsync(Owner(user), accountOwned ? StartingLevel(user) : null,
+            selectedCategory, cancellationToken);
         return session is null
-            ? Problem(409, "no_words_available", "Brak słówek do powtórki.")
+            ? Problem(409, "no_words_available", selectedCategory is null
+                ? "Brak słówek do powtórki."
+                : "W tej kategorii nie ma teraz dostępnych słówek.")
             : Results.Ok(session);
     }).AddEndpointFilter(RequireLocalClient);
 
