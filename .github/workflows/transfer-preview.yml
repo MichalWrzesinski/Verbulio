@@ -1,0 +1,78 @@
+name: Transfer private preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Successful CI run ID from main
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: verbulio-private-preview
+  cancel-in-progress: false
+
+jobs:
+  transfer:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify the CI run and download its package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$CI_RUN_ID" =~ ^[0-9]+$ ]]
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID")"
+          revision="$(jq -er --arg repo "$GITHUB_REPOSITORY" '
+            select(.path == ".github/workflows/ci.yml" and .event == "push"
+              and .head_branch == "main" and .conclusion == "success"
+              and .head_repository.full_name == $repo) | .head_sha
+          ' <<< "$run")"
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+          cd "$RUNNER_TEMP"
+          gh run download "$CI_RUN_ID" --repo "$GITHUB_REPOSITORY" --name verbulio-preview
+          [[ "$(tar -xOzf verbulio-preview.tar.gz ./REVISION)" == "$revision" ]]
+          filename="$revision-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz"
+          mv verbulio-preview.tar.gz "$filename"
+          sha256sum "$filename" > "$filename.sha256"
+          printf 'PREVIEW_FILENAME=%s\n' "$filename" >> "$GITHUB_ENV"
+
+      - name: Transfer the verified package over SFTP
+        env:
+          PREVIEW_SFTP_KEY: ${{ secrets.PREVIEW_SFTP_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$PREVIEW_SFTP_KEY" ]]; then
+            printf 'Configure the dedicated PREVIEW_SFTP_KEY secret first.\n' >&2
+            exit 1
+          fi
+          cd "$RUNNER_TEMP"
+          ssh_dir="$(mktemp -d)"
+          trap 'rm -rf -- "$ssh_dir"' EXIT
+          umask 077
+          printf '%s\n' "$PREVIEW_SFTP_KEY" > "$ssh_dir/identity"
+          unset PREVIEW_SFTP_KEY
+          cat > "$ssh_dir/known_hosts" <<'KEY'
+          151.240.121.172 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGYTMIG6vPOaHudYMg85u011tS/Shg2OBYDCTgWhBfxH
+          KEY
+          sftp -F /dev/null -b - -i "$ssh_dir/identity" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=10 \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$ssh_dir/known_hosts" \
+            -o GlobalKnownHostsFile=/dev/null -o VerifyHostKeyDNS=no \
+            -o HostKeyAlgorithms=ssh-ed25519 \
+            deploy-verbulio@151.240.121.172 <<EOF_SFTP
+          cd incoming
+          put $PREVIEW_FILENAME $PREVIEW_FILENAME.part
+          rename $PREVIEW_FILENAME.part $PREVIEW_FILENAME
+          put $PREVIEW_FILENAME.sha256 $PREVIEW_FILENAME.sha256.part
+          rename $PREVIEW_FILENAME.sha256.part $PREVIEW_FILENAME.sha256
+          EOF_SFTP
+          printf 'Transferred %s\n' "$PREVIEW_FILENAME"

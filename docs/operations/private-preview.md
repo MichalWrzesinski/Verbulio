@@ -35,3 +35,11 @@ ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:5443:127.0.0.1:5443 webhome-vps
 ```
 
 Check the health endpoint through the tunnel and complete placement, registration, login and a category session with test data. Revert by stopping the preview service and selecting the previous release, restoring the isolated database if the candidate changed the schema incompatibly. For the first preview, stopping the service withdraws access. Keep the public virtual host separate.
+
+## GitHub Actions transfer
+
+Run **Transfer private preview** from `main` with the ID of a successful CI push run on `main`. The workflow checks the repository, workflow, branch, event, result and packaged revision before SFTP transfer. The checksum appears last in `/srv/Verbulio-preview-sftp/incoming`. Verify it there before activation. A file ending in `.part` is an incomplete transfer. Package files are delivered to this directory exclusively by GitHub Actions.
+
+Provision a dedicated SSH key and store its private half as the repository Actions secret `PREVIEW_SFTP_KEY`. Install its public half in a root-owned authorized keys file with the `restrict` option. Scope the SSH server configuration to `Match User deploy-verbulio`, with public-key authentication only, `DisableForwarding yes`, `ForceCommand internal-sftp -d /` and the dedicated `AuthorizedKeysFile`. Set `ChrootDirectory /srv/Verbulio-preview-sftp`. The chroot and its path components belong to root and are writable only by root. The incoming directory belongs to `deploy-verbulio` and uses mode 0700. Check both configuration syntax and effective settings for the dedicated user before reloading SSH. Keep privileges for container activation separate from the SFTP account.
+
+CI transfer and runtime activation are separate operations. The transfer workflow only delivers candidate files. The first container setup and activation use the preview-only service and database, separately from the public Nginx site.
