@@ -326,13 +326,14 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     categories_path = ACCOUNT + "/learning/categories"
     guest.request(categories_path, 401)
     anonymous.request(categories_path, 401)
-    assert {"id": "jedzenie", "title": "Jedzenie"} in owner.request(categories_path)
+    assert {"id": "jedzenie", "title": "Jedzenie", "availableWords": 5} in owner.request(categories_path)
     assert owner.request(ACCOUNT_LEARNING + "?category=unknown", 404, "POST")["code"] == "category_not_found"
     assert owner.request(ACCOUNT_LEARNING + "?category=emocje", 409, "POST")["code"] == "no_words_available"
 
     food_path = ACCOUNT_LEARNING + "?category=jedzenie"
     food = owner.request(food_path, method="POST")
     food_resource = f"{ACCOUNT_LEARNING}/{food['id']}"
+    assert food["categoryTitle"] == "Jedzenie"
     assert food["summary"]["wordCount"] == 5
     assert owner.request(ACCOUNT_LEARNING + "?category=sport", method="POST") == food
     assert owner.request(food_resource) == food
@@ -346,6 +347,7 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     assert food["category"] == "jedzenie"
     assert food["summary"] == {"firstTryCorrect": 5, "wordCount": 5, "wordsResolved": 5, "completed": True}
     assert owner.request(food_path, 409, "POST")["code"] == "no_words_available"
+    assert {"id": "jedzenie", "title": "Jedzenie", "availableWords": 0} in owner.request(categories_path)
 
     first = owner.request(ACCOUNT_LEARNING, method="POST")
     assert first["summary"]["wordCount"] == 10

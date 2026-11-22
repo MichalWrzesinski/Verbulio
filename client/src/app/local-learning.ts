@@ -35,6 +35,13 @@ interface Session {
   id: string;
   question: Question | null;
   summary: Summary;
+  categoryTitle?: string | null;
+}
+
+interface Category {
+  id: string;
+  title: string;
+  availableWords: number;
 }
 
 interface Feedback {
@@ -97,6 +104,10 @@ export class LocalLearning {
   protected readonly selected = signal<number | null>(null);
   protected readonly canRetry = signal(false);
   protected readonly signInRequired = signal(false);
+  protected readonly choosingCategory = signal(false);
+  protected readonly categories = signal<Category[] | null>(null);
+  protected readonly emptyCategory = signal<Category | null>(null);
+  private readonly wordPlural = new Intl.PluralRules('pl');
 
   protected readonly question = computed(() => this.session()?.question ?? null);
   protected readonly targetLanguage = computed(() =>
@@ -130,7 +141,29 @@ export class LocalLearning {
     }
   }
 
-  protected start(): void {
+  protected openCategories(): void {
+    this.choosingCategory.set(true);
+    this.emptyCategory.set(null);
+    this.categories.set(null);
+    this.focusMain();
+    void this.run(async () => {
+      const categories = await firstValueFrom(this.http.get<Category[]>(`${this.api}/categories`));
+      if (!this.destroyRef.destroyed) this.categories.set(categories);
+    });
+  }
+
+  protected closeCategories(): void {
+    this.choosingCategory.set(false);
+    this.error.set('');
+    this.focusMain();
+  }
+
+  protected wordsLabel(count: number): string {
+    const form = this.wordPlural.select(count);
+    return `${count} ${form === 'one' ? 'słówko' : form === 'few' ? 'słówka' : 'słówek'}`;
+  }
+
+  protected start(category?: Category): void {
     void this.run(async () => {
       if (!this.accountOwned) {
         await firstValueFrom(
@@ -139,9 +172,29 @@ export class LocalLearning {
       }
       if (this.destroyRef.destroyed) return;
       const session = await firstValueFrom(
-        this.http.post<Session>(`${this.api}/sessions`, null, { headers: clientHeaders }),
-      );
+        this.http.post<Session>(`${this.api}/sessions`, null, {
+          headers: clientHeaders,
+          params: category ? { category: category.id } : {},
+        }),
+      ).catch((error: unknown) => {
+        if (
+          category &&
+          error instanceof HttpErrorResponse &&
+          error.status === 409 &&
+          error.error?.code === 'no_words_available'
+        ) {
+          return null;
+        }
+        throw error;
+      });
       if (this.destroyRef.destroyed) return;
+      if (!session) {
+        this.emptyCategory.set(category ?? null);
+        this.focusMain();
+        return;
+      }
+      this.choosingCategory.set(false);
+      this.emptyCategory.set(null);
       sessionStorage.setItem(this.activeSessionKey, session.id);
       this.restoreSession(session);
       this.focusMain();
@@ -310,6 +363,8 @@ export class LocalLearning {
 
   private requireSignIn(): void {
     this.reset();
+    this.choosingCategory.set(false);
+    this.emptyCategory.set(null);
     this.latestSession = null;
     this.pendingAttempt = null;
     this.feedback.set(null);
