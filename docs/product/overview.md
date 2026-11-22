@@ -12,7 +12,7 @@ Use a controlled bilingual fixture set and an authenticated test identity to exe
 
 ## Decisions for dependent increments
 
-- Session queue tail and extra returns. Recommend preserving unlimited returns and the existing completion rule. When fewer than two distinct eligible questions remain, present available questions before retrying and allow an immediate retry if none remain.
+- The approved queue rule keeps unlimited returns. A wrong word goes after two available questions, after one if only one remains, or immediately if the queue is empty. A completed session still requires a correct answer for every selected word.
 - Streak day boundary. Recommend storing the completion instant and the session's IANA time zone, preserving credited days after travel. A queued final answer should credit the captured completion day only after server acceptance, subject to a bounded clock policy.
 - Duplicate sign-up email. Recommend a neutral registration response plus clear sign-in and reset links, with limits on email activity.
 - Placement. Compare difficulty and result estimators against synthetic profiles before selecting an algorithm. Require all-wrong to produce A1 and all-correct at least C1. Treat the result as an exercise-selection estimate.

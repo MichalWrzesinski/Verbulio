@@ -1,0 +1,11 @@
+:host {
+  display: contents;
+}
+
+dialog.dialog:not([open]) {
+  display: none;
+}
+
+dialog::backdrop {
+  background: var(--backdrop);
+}

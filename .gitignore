@@ -4,3 +4,5 @@
 !.env.example
 **/bin/
 **/obj/
+
+.local-keys/

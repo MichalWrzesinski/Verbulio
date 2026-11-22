@@ -24,3 +24,40 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test -- --watch=false
+
+  backend:
+    name: Backend checks
+    runs-on: ubuntu-latest
+    env:
+      ConnectionStrings__Learning: Host=127.0.0.1;Port=5432;Database=verbulio;Username=postgres;Password=local-ci-fixture
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: verbulio
+          POSTGRES_PASSWORD: local-ci-fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d verbulio"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: api/global.json
+      - run: dotnet restore Verbulio.Learning.Tests
+      - run: dotnet restore Verbulio.Api
+      - name: Check C# formatting
+        run: |
+          for project in Verbulio.Learning Verbulio.Learning.Tests Verbulio.Api; do
+            dotnet format whitespace "$project/$project.csproj" --verify-no-changes --no-restore || exit
+          done
+      - run: dotnet test Verbulio.Learning.Tests -c Release --no-restore
+      - run: dotnet build Verbulio.Api -c Release --no-restore
+      - run: python3 checks/local_learning.py
