@@ -25,6 +25,7 @@
         <p class="fb fb--bad" role="alert">{{ error() }}</p>
       }
       <a class="key btn btn--primary" routerLink="/nauka">Ćwicz dalej</a>
+      <a class="link" routerLink="/profil">Twój profil</a>
       <button type="button" class="key btn btn--secondary" [disabled]="busy()" (click)="logout()">
         {{ busy() ? 'Wylogowuję…' : 'Wyloguj się' }}
       </button>
