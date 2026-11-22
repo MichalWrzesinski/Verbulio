@@ -156,12 +156,17 @@ def registration_data(resource, email):
     }
 
 
-def pilot_translation(question):
+def pilot_item(question):
     source, target = ("polish", "english") if question["direction"] == "PolishToEnglish" else ("english", "polish")
     prompt = question["text"].split(" (", 1)[0]
     dictionary_file = ROOT / "Verbulio.Api/Dictionary/placement-pilot-v1.tsv"
     with dictionary_file.open(encoding="utf-8", newline="") as entries:
         item = next(row for row in csv.DictReader(entries, delimiter="\t") if row[source] == prompt)
+    return item, target
+
+
+def pilot_translation(question):
+    item, target = pilot_item(question)
     return item[target], item["level"]
 
 
@@ -318,6 +323,30 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     guest.request(IDENTITY, 204, "POST")
     guest.request(ACCOUNT_LEARNING, 401, "POST")
     anonymous.request(ACCOUNT_LEARNING, 401, "POST")
+    categories_path = ACCOUNT + "/learning/categories"
+    guest.request(categories_path, 401)
+    anonymous.request(categories_path, 401)
+    assert {"id": "jedzenie", "title": "Jedzenie"} in owner.request(categories_path)
+    assert owner.request(ACCOUNT_LEARNING + "?category=unknown", 404, "POST")["code"] == "category_not_found"
+    assert owner.request(ACCOUNT_LEARNING + "?category=emocje", 409, "POST")["code"] == "no_words_available"
+
+    food_path = ACCOUNT_LEARNING + "?category=jedzenie"
+    food = owner.request(food_path, method="POST")
+    food_resource = f"{ACCOUNT_LEARNING}/{food['id']}"
+    assert food["summary"]["wordCount"] == 5
+    assert owner.request(ACCOUNT_LEARNING + "?category=sport", method="POST") == food
+    assert owner.request(food_resource) == food
+    food_words = set()
+    while question := food["question"]:
+        assert food["category"] == "jedzenie"
+        food_words.add(pilot_item(question)[0]["id"])
+        food = owner.request(food_resource + "/answers", 200, "POST",
+                             pilot_answer(question), str(uuid.uuid4()))["session"]
+    assert food_words == {"a1-03", "a1-06", "a1-10", "a1-14", "a1-15"}, food_words
+    assert food["category"] == "jedzenie"
+    assert food["summary"] == {"firstTryCorrect": 5, "wordCount": 5, "wordsResolved": 5, "completed": True}
+    assert owner.request(food_path, 409, "POST")["code"] == "no_words_available"
+
     first = owner.request(ACCOUNT_LEARNING, method="POST")
     assert first["summary"]["wordCount"] == 10
     resource = f"{ACCOUNT_LEARNING}/{first['id']}"
