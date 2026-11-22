@@ -19,6 +19,7 @@ var connectionString = builder.Configuration.GetConnectionString("Learning")
 builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<SessionStore>();
+builder.Services.AddSingleton<GuestPlacementStore>();
 builder.Services.AddProblemDetails();
 builder.Services.AddDataProtection()
     .SetApplicationName("Verbulio.LocalLearning")
@@ -127,17 +128,24 @@ sessions.MapPost("/{id:guid}/end", async (Guid id, ClaimsPrincipal user, Session
         ? Results.Ok(session)
         : Problem(404, "session_not_found", "Nie znaleziono sesji.")).AddEndpointFilter(RequireLocalClient);
 
+app.MapLocalPlacement();
+
 if (args.Contains("--migrate", StringComparer.Ordinal))
 {
     var dataSource = app.Services.GetRequiredService<NpgsqlDataSource>();
     await using var connection = await dataSource.OpenConnectionAsync();
     await using var transaction = await connection.BeginTransactionAsync();
-    await using var stream = typeof(SessionStore).Assembly
-        .GetManifestResourceStream("Verbulio.Api.Migrations.001-learning.sql")
-        ?? throw new InvalidOperationException("Missing learning migration.");
-    using var reader = new StreamReader(stream);
-    await using var migration = new NpgsqlCommand(await reader.ReadToEndAsync(), connection, transaction);
-    await migration.ExecuteNonQueryAsync();
+    var assembly = typeof(SessionStore).Assembly;
+    foreach (var resource in assembly.GetManifestResourceNames()
+        .Where(name => name.StartsWith("Verbulio.Api.Migrations.", StringComparison.Ordinal))
+        .Order(StringComparer.Ordinal))
+    {
+        await using var stream = assembly.GetManifestResourceStream(resource)
+            ?? throw new InvalidOperationException("Missing migration resource.");
+        using var reader = new StreamReader(stream);
+        await using var migration = new NpgsqlCommand(await reader.ReadToEndAsync(), connection, transaction);
+        await migration.ExecuteNonQueryAsync();
+    }
     await transaction.CommitAsync();
     return;
 }
