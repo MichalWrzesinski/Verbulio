@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SESSION = "/api/v1/local-learning/sessions"
 IDENTITY = "/api/v1/local-learning/identity"
 REGISTRATION = "/api/v1/local-registration/accounts"
+ACCOUNT = "/api/v1/local-account"
 TRANSLATIONS = {
     "house": "dom", "dom": "house",
     "window": "okno", "okno": "window",
@@ -28,13 +30,16 @@ TRANSLATIONS = {
 
 
 class Browser:
-    def __init__(self, base):
+    def __init__(self, base, tls):
         self.base = base
+        self.tls = tls
+        self.cookies = http.cookiejar.CookieJar()
         self.client = urllib.request.build_opener(
-            urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
+            urllib.request.HTTPCookieProcessor(self.cookies),
+            urllib.request.HTTPSHandler(context=tls),
         )
 
-    def request(self, path, status=200, method="GET", body=None, key=None):
+    def request(self, path, status=200, method="GET", body=None, key=None, include_cookie_headers=False):
         headers = {"X-Verbulio-Client": "local-learning"}
         data = None
         if key:
@@ -52,15 +57,18 @@ class Browser:
             payload = response.read()
             expected = (status,) if isinstance(status, int) else status
             assert response.status in expected, (path, response.status, payload)
-            return json.loads(payload) if payload else None
+            decoded = json.loads(payload) if payload else None
+            if include_cookie_headers:
+                return decoded, response.headers.get_all("Set-Cookie", [])
+            return decoded
 
 
-def wait_ready(server, base):
+def wait_ready(server, base, tls):
     for _ in range(60):
         if server.poll() is not None:
             raise RuntimeError("The ASP.NET process exited before it reported healthy.")
         try:
-            Browser(base).request("/health")
+            Browser(base, tls).request("/health")
             return
         except (urllib.error.URLError, TimeoutError):
             time.sleep(0.1)
@@ -209,6 +217,83 @@ def exercise_registration(owner, other, anonymous, resource):
                                    registration_data(second_resource, "retry-" + data["email"]))
     assert second_account["startingLevel"] == "A1"
     assert second_account["id"] != account["id"]
+    return [data, candidate][winner]["email"], account, "retry-" + data["email"], second_account
+
+
+def copy_account_cookie(browser):
+    previous = Browser(browser.base, browser.tls)
+    for cookie in browser.cookies:
+        if cookie.name == "verbulio.local-account":
+            previous.cookies.set_cookie(cookie)
+    return previous
+
+
+def start_account_session(browser, guest, anonymous, email, expected):
+    browser.request(ACCOUNT + "/session", 401)
+    guest.request(ACCOUNT + "/session", 401)
+    anonymous.request(ACCOUNT + "/session", 401)
+    guest.request(ACCOUNT + "/logout", 401, "POST")
+    anonymous.request(ACCOUNT + "/logout", 401, "POST")
+    invalid = {"email": email, "password": "other local fixture password!"}
+    wrong = browser.request(ACCOUNT + "/login", 401, "POST", invalid)
+    unknown = browser.request(ACCOUNT + "/login", 401, "POST", {**invalid, "email": "unknown@example.invalid"})
+    for key in ("code", "title", "status"):
+        assert wrong[key] == unknown[key]
+    login = {"email": email.upper(), "password": "local fixture password!"}
+    assert browser.request(ACCOUNT + "/login", 200, "POST", login) == expected
+    assert browser.request(ACCOUNT + "/session") == expected
+    cookie = next(cookie for cookie in browser.cookies if cookie.name == "verbulio.local-account")
+    assert cookie.secure
+    return login
+
+
+def finish_account_session(browser, login, expected, other, other_email, other_account):
+    assert browser.request(ACCOUNT + "/session") == expected
+    other_login = {"email": other_email, "password": "local fixture password!"}
+    assert other.request(ACCOUNT + "/login", 200, "POST", other_login) == other_account
+    assert other.request(ACCOUNT + "/session") == other_account
+    assert browser.request(ACCOUNT + "/session") == expected
+
+    old_cookie = copy_account_cookie(browser)
+    contenders = (browser, copy_account_cookie(browser))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        attempts = [pool.submit(contender.request, ACCOUNT + "/login", (200, 409), "POST", login,
+                                include_cookie_headers=True) for contender in contenders]
+    reports = [attempt.result() for attempt in attempts]
+    assert sum(report == expected for report, _ in reports) == 1
+    assert any(report.get("code") == "session_rotation_conflict" and not headers
+               for report, headers in reports)
+    winner_index = next(index for index, (report, _) in enumerate(reports) if report == expected)
+    winner = contenders[winner_index]
+    assert reports[winner_index][1]
+    old_cookie.request(ACCOUNT + "/session", 401)
+    _, stale_headers = old_cookie.request(ACCOUNT + "/session/reset", 204, "POST", include_cookie_headers=True)
+    assert stale_headers and not list(old_cookie.cookies)
+    _, active_headers = winner.request(ACCOUNT + "/session/reset", 204, "POST", include_cookie_headers=True)
+    assert not active_headers
+    assert winner.request(ACCOUNT + "/session") == expected
+    revoked = copy_account_cookie(winner)
+    winner.request(ACCOUNT + "/logout", 204, "POST")
+    winner.request(ACCOUNT + "/session", 401)
+    revoked.request(ACCOUNT + "/session", 401)
+    assert other.request(ACCOUNT + "/session") == other_account
+
+    if expire := os.environ.get("VERBULIO_EXPIRE_TEST_SESSIONS"):
+        assert winner.request(ACCOUNT + "/login", 200, "POST", login) == expected
+        subprocess.run([expire, "near-idle"], check=True)
+        assert winner.request(ACCOUNT + "/session") == expected
+        subprocess.run([expire, "assert-touch"], check=True)
+        subprocess.run([expire, "idle"], check=True)
+        winner.request(ACCOUNT + "/session", 401)
+        assert winner.request(ACCOUNT + "/login", 200, "POST", login) == expected
+        subprocess.run([expire, "absolute"], check=True)
+        winner.request(ACCOUNT + "/session", 401)
+        print("Idle activity and both server expiry conditions verified while cookies were present.")
+
+    bad_login = {"email": login["email"], "password": "invalid fixture password!"}
+    results = [winner.request(ACCOUNT + "/login", (401, 429), "POST", bad_login) for _ in range(13)]
+    assert any(result and result["code"] == "login_rate_limited" for result in results)
+    assert results[-1] is None
 
 
 def stop(server):
@@ -220,13 +305,34 @@ def run(dotnet):
     with socket.socket() as reserve:
         reserve.bind(("127.0.0.1", 0))
         port = reserve.getsockname()[1]
-    base = f"http://127.0.0.1:{port}"
+    base = f"https://127.0.0.1:{port}"
     with tempfile.TemporaryDirectory(prefix="verbulio-learning-") as directory:
+        cert = Path(directory) / "localhost.crt"
+        key_file = Path(directory) / "localhost.key"
+        config = Path(directory) / "localhost.cnf"
+        config.write_text("""[req]
+distinguished_name = name
+x509_extensions = extensions
+prompt = no
+[name]
+CN = 127.0.0.1
+[extensions]
+subjectAltName = IP:127.0.0.1
+basicConstraints = critical,CA:TRUE
+""", encoding="utf-8")
+        subprocess.run(
+            ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
+             "-keyout", str(key_file), "-out", str(cert), "-config", str(config)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True,
+        )
+        tls = ssl.create_default_context(cafile=str(cert))
         env = {
             **os.environ,
             "ASPNETCORE_URLS": base,
             "ASPNETCORE_ENVIRONMENT": "Development",
             "LearningKeyDirectory": directory,
+            "ASPNETCORE_Kestrel__Certificates__Default__Path": str(cert),
+            "ASPNETCORE_Kestrel__Certificates__Default__KeyPath": str(key_file),
         }
         dll = ROOT / "Verbulio.Api/bin/Release/net10.0/Verbulio.Api.dll"
         command = [dotnet, str(dll)]
@@ -234,8 +340,8 @@ def run(dotnet):
         with open(Path(directory) / "api.log", "w+", encoding="utf-8") as log:
             server = subprocess.Popen(command, env=env, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
             try:
-                wait_ready(server, base)
-                owner, other, anonymous = Browser(base), Browser(base), Browser(base)
+                wait_ready(server, base, tls)
+                owner, other, anonymous = Browser(base, tls), Browser(base, tls), Browser(base, tls)
                 anonymous.request(SESSION, status=401, method="POST")
                 owner.request(IDENTITY, status=204, method="POST")
                 other.request(IDENTITY, status=204, method="POST")
@@ -268,11 +374,12 @@ def run(dotnet):
                 placement = start_placement(owner, other, anonymous)
                 stop(server)
                 server = subprocess.Popen(command, env=env, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
-                wait_ready(server, base)
+                wait_ready(server, base, tls)
                 unfinished_data = registration_data(placement[0], uuid.uuid4().hex + "@example.invalid")
                 owner.request(REGISTRATION, 409, "POST", unfinished_data)
                 finish_placement(owner, *placement)
-                exercise_registration(owner, other, anonymous, placement[0])
+                email, account, other_email, other_account = exercise_registration(owner, other, anonymous, placement[0])
+                login = start_account_session(owner, other, anonymous, email, account)
                 assert owner.request(resource) == accepted["session"]
                 assert owner.request(resource + "/answers", 200, "POST", submission, key) == accepted
 
@@ -299,10 +406,15 @@ def run(dotnet):
                 assert not ended["summary"]["completed"]
                 assert other.request(SESSION, method="POST")["summary"]["wordCount"] == 2
 
+                stop(server)
+                server = subprocess.Popen(command, env=env, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+                wait_ready(server, base, tls)
+                finish_account_session(owner, login, account, other, other_email, other_account)
+
                 if previous_api := os.environ.get("VERBULIO_PREVIOUS_API_DLL"):
                     stop(server)
                     server = subprocess.Popen([dotnet, previous_api], env=env, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
-                    wait_ready(server, base)
+                    wait_ready(server, base, tls)
                     claimed_test = placement[0]
                     owner.request(claimed_test + "/restart", 404, "POST")
                     assert owner.request(claimed_test)["test"]["result"] == "A1"
@@ -313,8 +425,15 @@ def run(dotnet):
                 raise
             finally:
                 stop(server)
+            log.seek(0)
+            audit = log.read()
+            assert "Account login rejected" in audit
+            assert "Account login attempt rate limit reached" in audit
+            assert "Account session authorization denied" in audit
+            assert email.lower() not in audit.lower()
+            assert "local fixture password!" not in audit.lower()
 
-    print("PostgreSQL learning, placement and registration integration passed: authorization, restart, duplicate submission, completion and partial progress.")
+    print("PostgreSQL learning, placement, registration and account-session integration passed: authorization, restart, duplicate submission, completion and partial progress.")
 
 
 if __name__ == "__main__":
