@@ -115,10 +115,19 @@ def finish_placement(owner, resource, first, key):
     assert duplicate == first
     current = duplicate["test"]
     for number in range(2, 21):
-        assert current["question"]["number"] == number
+        question = current["question"]
+        assert question["number"] == number
+        assert {"number", "text", "direction", "mode", "choices"} == question.keys()
         assert current["result"] is None
+        submission = {"questionNumber": number, "skip": True}
+        if number == 2:
+            owner.request(resource + "/answers", 400, "POST",
+                          {"questionNumber": number, "text": "\u0000"}, str(uuid.uuid4()))
+            assert owner.request(resource)["test"] == current
+            prefix = "en-" if question["direction"] == "PolishToEnglish" else "pl-"
+            submission = {"questionNumber": number, "text": prefix + question["text"][3:]}
         response = owner.request(resource + "/answers", 200, "POST",
-                                 {"questionNumber": number, "skip": True}, str(uuid.uuid4()))
+                                 submission, str(uuid.uuid4()))
         current = response["test"]
         assert {"question", "answeredCount", "totalCount", "result"} == current.keys()
         assert current["answeredCount"] == number

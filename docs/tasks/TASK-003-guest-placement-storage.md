@@ -15,7 +15,7 @@ Exercise CP-001 placement start, answers, resume, controlled restart and server-
 
 ## Verification
 
-CP-001, server-side segment. The existing PostgreSQL integration command exercises both local API flows. It checks guest isolation and rejected writes, explicit restart, concurrent repeats, resume after process restart, and all 20 responses through the persisted result.
+CP-001, server-side segment. The existing PostgreSQL integration command exercises both local API flows. It checks the public question field allowlist, typed input validation, guest isolation and rejected writes, explicit restart, concurrent repeats, resume after process restart, and all 20 responses through the persisted result.
 
 ## Report
 

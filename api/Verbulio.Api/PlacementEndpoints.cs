@@ -28,9 +28,9 @@ internal static class PlacementEndpoints
                 return Problem(400, "invalid_submission_key", "Brakuje identyfikatora odpowiedzi.");
             }
 
-            if (answer.Text?.Length > 256)
+            if (answer.Text is { } text && (text.Length > 256 || text.Contains('\0')))
             {
-                return Problem(400, "invalid_answer", "Odpowiedź jest za długa.");
+                return Problem(400, "invalid_answer", "Podaj odpowiedź w wymaganym formacie.");
             }
 
             try

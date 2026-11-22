@@ -6,7 +6,11 @@ using Verbulio.Learning.Placement;
 
 namespace Verbulio.Api;
 
-internal sealed record GuestPlacementView(Guid Id, PlacementView Test);
+internal sealed record GuestPlacementQuestion(
+    int Number, string Text, TranslationDirection Direction, AnswerMode Mode, IReadOnlyList<string> Choices);
+internal sealed record GuestPlacementProgress(
+    GuestPlacementQuestion? Question, int AnsweredCount, int TotalCount, VocabularyLevel? Result);
+internal sealed record GuestPlacementView(Guid Id, GuestPlacementProgress Test);
 internal sealed record GuestPlacementSubmission(Guid Key, PlacementSubmission Answer);
 
 internal sealed class GuestPlacementStore(NpgsqlDataSource dataSource)
@@ -80,7 +84,7 @@ internal sealed class GuestPlacementStore(NpgsqlDataSource dataSource)
         }
 
         await transaction.CommitAsync(cancellationToken);
-        return new GuestPlacementView(id, view);
+        return ToView(id, view);
     }
 
     private static async Task LockGuestAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid guest,
@@ -106,7 +110,7 @@ internal sealed class GuestPlacementStore(NpgsqlDataSource dataSource)
         insert.Parameters.AddWithValue(bank.Version);
         insert.Parameters.AddWithValue(seed);
         await insert.ExecuteNonQueryAsync(cancellationToken);
-        return new GuestPlacementView(id, new PlacementTest(bank, seed).View);
+        return ToView(id, new PlacementTest(bank, seed).View);
     }
 
     private static async Task<SavedTest?> LoadAsync(NpgsqlConnection connection, NpgsqlTransaction? transaction,
@@ -131,7 +135,15 @@ internal sealed class GuestPlacementStore(NpgsqlDataSource dataSource)
             reader.IsDBNull(4) ? null : (VocabularyLevel)reader.GetInt32(4));
     }
 
-    private static GuestPlacementView ToView(SavedTest saved) => new(saved.Id, Replay(saved).View);
+    private static GuestPlacementView ToView(SavedTest saved) => ToView(saved.Id, Replay(saved).View);
+
+    private static GuestPlacementView ToView(Guid id, PlacementView view)
+    {
+        var question = view.Question is { } model
+            ? new GuestPlacementQuestion(model.Number, model.Text, model.Direction, model.Mode, model.Choices)
+            : null;
+        return new GuestPlacementView(id, new GuestPlacementProgress(question, view.AnsweredCount, view.TotalCount, view.Result));
+    }
 
     private static PlacementTest Replay(SavedTest saved)
     {
