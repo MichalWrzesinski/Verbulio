@@ -115,8 +115,10 @@ export class LocalLearning {
           const current = await firstValueFrom(
             this.http.get<Session>(`${this.api}/sessions/${saved}`),
           );
+          if (this.destroyRef.destroyed) return;
           this.restoreSession(current);
         } catch (error) {
+          if (this.destroyRef.destroyed) return;
           if (!(error instanceof HttpErrorResponse) || ![401, 404].includes(error.status)) {
             throw error;
           }
@@ -135,9 +137,11 @@ export class LocalLearning {
           this.http.post(`${this.api}/identity`, null, { headers: clientHeaders }),
         );
       }
+      if (this.destroyRef.destroyed) return;
       const session = await firstValueFrom(
         this.http.post<Session>(`${this.api}/sessions`, null, { headers: clientHeaders }),
       );
+      if (this.destroyRef.destroyed) return;
       sessionStorage.setItem(this.activeSessionKey, session.id);
       this.restoreSession(session);
       this.focusMain();
@@ -193,6 +197,7 @@ export class LocalLearning {
           headers: clientHeaders,
         }),
       );
+      if (this.destroyRef.destroyed) return;
       this.session.set(updated);
       sessionStorage.removeItem(this.feedbackCheckpointKey);
       this.feedback.set(null);
@@ -228,6 +233,7 @@ export class LocalLearning {
             },
           ),
         );
+        if (this.destroyRef.destroyed) return;
         const checkpoint: FeedbackCheckpoint = {
           before: session,
           after: response.session,
@@ -240,6 +246,7 @@ export class LocalLearning {
         this.pendingAttempt = null;
         this.canRetry.set(false);
       } catch (error) {
+        if (this.destroyRef.destroyed) return;
         if (error instanceof HttpErrorResponse && error.status >= 400 && error.status < 500) {
           this.pendingAttempt = null;
           this.canRetry.set(false);
@@ -248,6 +255,7 @@ export class LocalLearning {
             const current = await firstValueFrom(
               this.http.get<Session>(`${this.api}/sessions/${session.id}`),
             );
+            if (this.destroyRef.destroyed) return;
             this.session.set(current);
             this.typed.set('');
             this.error.set('Pytanie zmieniło się w innej karcie. Sesja została odświeżona.');
@@ -316,6 +324,7 @@ export class LocalLearning {
     try {
       await action();
     } catch (error) {
+      if (this.destroyRef.destroyed) return;
       if (this.accountOwned && error instanceof HttpErrorResponse && error.status === 401) {
         this.requireSignIn();
         return;
