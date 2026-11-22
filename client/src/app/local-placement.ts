@@ -97,7 +97,7 @@ export class LocalPlacement {
         if (error.status !== 404) throw error;
 
         this.show(await this.currentTest(), true);
-        this.message.set('Test został już rozpoczęty od nowa w innej karcie.');
+        this.message.set('Nie udało się zacząć od nowa. Wyświetlono bieżący test.');
       }
     });
   }

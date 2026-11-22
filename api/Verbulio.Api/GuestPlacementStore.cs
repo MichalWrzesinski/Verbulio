@@ -42,7 +42,7 @@ internal sealed class GuestPlacementStore(NpgsqlDataSource dataSource)
         await LockGuestAsync(connection, transaction, guest, cancellationToken);
         await using var retire = new NpgsqlCommand("""
             UPDATE guest_placement_tests SET superseded = true
-            WHERE id = $1 AND guest_id = $2 AND NOT superseded
+            WHERE id = $1 AND guest_id = $2 AND NOT superseded AND claimed_at IS NULL
             """, connection, transaction);
         retire.Parameters.AddWithValue(id);
         retire.Parameters.AddWithValue(guest);

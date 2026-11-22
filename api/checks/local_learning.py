@@ -19,6 +19,7 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 SESSION = "/api/v1/local-learning/sessions"
 IDENTITY = "/api/v1/local-learning/identity"
+REGISTRATION = "/api/v1/local-registration/accounts"
 TRANSLATIONS = {
     "house": "dom", "dom": "house",
     "window": "okno", "okno": "window",
@@ -49,7 +50,8 @@ class Browser:
             response = error
         with response:
             payload = response.read()
-            assert response.status == status, (path, response.status, payload)
+            expected = (status,) if isinstance(status, int) else status
+            assert response.status in expected, (path, response.status, payload)
             return json.loads(payload) if payload else None
 
 
@@ -141,6 +143,58 @@ def finish_placement(owner, resource, first, key):
     owner.request(resource + "/answers", 409, "POST", {"questionNumber": 21, "skip": True}, str(uuid.uuid4()))
 
 
+def registration_data(resource, email):
+    return {
+        "placementTestId": resource.rsplit("/", 1)[-1],
+        "email": email,
+        "password": "local fixture password!",
+    }
+
+
+def exercise_registration(owner, other, anonymous, resource):
+    email_base = uuid.uuid4().hex
+    data = registration_data(resource, email_base + "@example.invalid")
+    candidate = {**data, "email": "second-" + data["email"]}
+    anonymous.request(REGISTRATION, 401, "POST", data)
+    denied = other.request(REGISTRATION, 409, "POST", data)
+    def signature(problem):
+        return problem["status"], problem["code"], problem["title"]
+
+    assert denied["code"] == "registration_unavailable"
+    assert signature(owner.request(REGISTRATION, 409, "POST", {**data, "placementTestId": str(uuid.uuid4())})) == signature(denied)
+    owner.request(REGISTRATION, 400, "POST", {**data, "startingLevel": "C2"})
+    owner.request(REGISTRATION, 400, "POST", {**data, "password": "short"})
+    owner.request(REGISTRATION, 400, "POST", {**data, "email": "Name <person@example.invalid>"})
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        requests = [pool.submit(owner.request, REGISTRATION, (201, 409), "POST", request)
+                    for request in (data, candidate)]
+    responses = [request.result() for request in requests]
+    assert sum("id" in response for response in responses) == 1
+    winner = next(index for index, response in enumerate(responses) if "id" in response)
+    account = responses[winner]
+    assert {"id", "startingLevel"} == account.keys()
+    assert account["startingLevel"] == owner.request(resource)["test"]["result"] == "A1"
+    assert signature(responses[1 - winner]) == signature(denied)
+    assert signature(owner.request(REGISTRATION, 409, "POST", data)) == signature(denied)
+    owner.request(resource + "/restart", 404, "POST")
+
+    # A duplicate email must roll back a claim on a different completed test.
+    tests = "/api/v1/local-placement/tests"
+    second = other.request(tests, method="POST")
+    second_resource = f"{tests}/{second['id']}"
+    other.request(REGISTRATION, 409, "POST", registration_data(second_resource, candidate["email"]))
+    for number in range(1, 21):
+        other.request(second_resource + "/answers", 200, "POST",
+                      {"questionNumber": number, "skip": True}, str(uuid.uuid4()))
+    existing_email = [data, candidate][winner]["email"].upper()
+    assert signature(other.request(REGISTRATION, 409, "POST", registration_data(second_resource, existing_email))) == signature(denied)
+    second_account = other.request(REGISTRATION, 201, "POST",
+                                   registration_data(second_resource, "retry-" + data["email"]))
+    assert second_account["startingLevel"] == "A1"
+    assert second_account["id"] != account["id"]
+
+
 def stop(server):
     server.terminate()
     server.wait(timeout=10)
@@ -199,7 +253,10 @@ def run(dotnet):
                 stop(server)
                 server = subprocess.Popen(command, env=env, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
                 wait_ready(server, base)
+                unfinished_data = registration_data(placement[0], uuid.uuid4().hex + "@example.invalid")
+                owner.request(REGISTRATION, 409, "POST", unfinished_data)
                 finish_placement(owner, *placement)
+                exercise_registration(owner, other, anonymous, placement[0])
                 assert owner.request(resource) == accepted["session"]
                 assert owner.request(resource + "/answers", 200, "POST", submission, key) == accepted
 
@@ -232,7 +289,7 @@ def run(dotnet):
             finally:
                 stop(server)
 
-    print("PostgreSQL learning and placement integration passed: authorization, restart, duplicate submission, completion and partial progress.")
+    print("PostgreSQL learning, placement and registration integration passed: authorization, restart, duplicate submission, completion and partial progress.")
 
 
 if __name__ == "__main__":
