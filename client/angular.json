@@ -44,6 +44,14 @@
               ],
               "outputHashing": "all"
             },
+            "preview": {
+              "fileReplacements": [
+                {
+                  "replace": "src/app/learning.routes.ts",
+                  "with": "src/app/learning.routes.development.ts"
+                }
+              ]
+            },
             "development": {
               "optimization": false,
               "extractLicenses": false,

@@ -16,9 +16,10 @@ using Verbulio.Learning.Placement;
 const string accountScheme = "LocalAccount";
 const string loginLimit = "LocalAccountLogin";
 var builder = WebApplication.CreateBuilder(args);
-if (!builder.Environment.IsDevelopment())
+var preview = builder.Environment.IsEnvironment("Preview");
+if (!builder.Environment.IsDevelopment() && !preview)
 {
-    throw new InvalidOperationException("The fixture API is available only in the Development environment.");
+    throw new InvalidOperationException("The fixture API is available only in the Development and private Preview environments.");
 }
 
 var connectionString = builder.Configuration.GetConnectionString("Learning")
@@ -107,7 +108,15 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false));
 });
 builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = false);
-builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4096);
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 4096;
+    if (preview)
+    {
+        options.Listen(IPAddress.Loopback, builder.Configuration.GetValue("PreviewPort", 5443),
+            endpoint => endpoint.UseHttps());
+    }
+});
 
 var app = builder.Build();
 app.UseExceptionHandler();
@@ -116,6 +125,12 @@ app.Use(async (context, next) =>
     if (context.Connection.RemoteIpAddress is not { } address || !IPAddress.IsLoopback(address))
     {
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
+
+    if (preview && !context.Request.IsHttps)
+    {
+        context.Response.StatusCode = StatusCodes.Status400BadRequest;
         return;
     }
 
@@ -253,6 +268,13 @@ if (args.Contains("--migrate", StringComparer.Ordinal))
     }
     await transaction.CommitAsync();
     return;
+}
+
+if (preview)
+{
+    app.UseStaticFiles();
+    app.Map("/api/{**path}", () => Results.NotFound());
+    app.MapFallbackToFile("index.html");
 }
 
 await app.RunAsync();
