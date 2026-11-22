@@ -200,7 +200,11 @@
           <p class="lead">Sesja przerwana. Powyżej widzisz wynik częściowy.</p>
         }
       </section>
-      <button type="button" class="key btn btn--primary" (click)="reset()">Gotowe</button>
+      @if (accountOwned) {
+        <a class="key btn btn--primary" routerLink="/logowanie" (click)="reset()">Gotowe</a>
+      } @else {
+        <button type="button" class="key btn btn--primary" (click)="reset()">Gotowe</button>
+      }
     </main>
   </div>
 } @else {
@@ -211,15 +215,24 @@
       </a>
     </header>
     <main #main class="entry" tabindex="-1">
-      <h1 class="h1">Lokalna sesja nauki</h1>
-      <p>Trzy przykładowe słówka z zestawu testowego.</p>
-      <div class="actions">
-        <button type="button" class="key btn btn--primary" [disabled]="busy()" (click)="start()">
-          Ćwicz dalej
-        </button>
-      </div>
-      @if (error()) {
-        <p class="fb fb--bad" role="alert">{{ error() }}</p>
+      <h1 class="h1">{{ accountOwned ? 'Nauka słówek' : 'Lokalna sesja nauki' }}</h1>
+      @if (signInRequired()) {
+        <p>Twoja sesja wygasła lub potrzebujesz zalogować się do konta.</p>
+        <a class="key btn btn--primary" routerLink="/logowanie">Zaloguj się</a>
+      } @else {
+        <div class="actions">
+          <button type="button" class="key btn btn--primary" [disabled]="busy()" (click)="start()">
+            Ćwicz dalej
+          </button>
+        </div>
+        @if (error()) {
+          <p class="fb fb--bad" role="alert">{{ error() }}</p>
+        }
+        @if (accountOwned) {
+          <a class="link" routerLink="/logowanie">Wróć do konta</a>
+        } @else {
+          <p class="small">Trzy przykładowe słówka z zestawu testowego.</p>
+        }
       }
     </main>
   </div>

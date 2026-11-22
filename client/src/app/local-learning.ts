@@ -2,6 +2,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import {
   afterNextRender,
   Component,
+  DestroyRef,
   computed,
   ElementRef,
   inject,
@@ -9,8 +10,9 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import { accountLearningStoragePrefix } from './account-learning-storage';
 
 interface Question {
   number: number;
@@ -61,10 +63,7 @@ interface Attempt {
   answer: { questionNumber: number; text?: string; choice?: number };
 }
 
-const api = '/api/v1/local-learning';
 const clientHeaders = { 'X-Verbulio-Client': 'local-learning' };
-const activeSessionKey = 'verbulio.local-learning.active-session';
-const feedbackCheckpointKey = 'verbulio.local-learning.feedback';
 
 @Component({
   selector: 'app-local-learning',
@@ -75,6 +74,16 @@ const feedbackCheckpointKey = 'verbulio.local-learning.feedback';
 export class LocalLearning {
   private readonly http = inject(HttpClient);
   private readonly injector = inject(Injector);
+  private readonly destroyRef = inject(DestroyRef);
+  protected readonly accountOwned = inject(ActivatedRoute).snapshot.data['accountOwned'] === true;
+  private readonly api = this.accountOwned
+    ? '/api/v1/local-account/learning'
+    : '/api/v1/local-learning';
+  private readonly storagePrefix = this.accountOwned
+    ? accountLearningStoragePrefix
+    : 'verbulio.local-learning';
+  private readonly activeSessionKey = this.storagePrefix + '.active-session';
+  private readonly feedbackCheckpointKey = this.storagePrefix + '.feedback';
   private readonly main = viewChild<ElementRef<HTMLElement>>('main');
   private readonly next = viewChild<ElementRef<HTMLButtonElement>>('next');
   private latestSession: Session | null = null;
@@ -87,6 +96,7 @@ export class LocalLearning {
   protected readonly typed = signal('');
   protected readonly selected = signal<number | null>(null);
   protected readonly canRetry = signal(false);
+  protected readonly signInRequired = signal(false);
 
   protected readonly question = computed(() => this.session()?.question ?? null);
   protected readonly targetLanguage = computed(() =>
@@ -98,18 +108,21 @@ export class LocalLearning {
   });
 
   constructor() {
-    const saved = sessionStorage.getItem(activeSessionKey);
+    const saved = sessionStorage.getItem(this.activeSessionKey);
     if (saved) {
       void this.run(async () => {
         try {
-          const current = await firstValueFrom(this.http.get<Session>(`${api}/sessions/${saved}`));
+          const current = await firstValueFrom(
+            this.http.get<Session>(`${this.api}/sessions/${saved}`),
+          );
           this.restoreSession(current);
         } catch (error) {
           if (!(error instanceof HttpErrorResponse) || ![401, 404].includes(error.status)) {
             throw error;
           }
-          sessionStorage.removeItem(activeSessionKey);
-          sessionStorage.removeItem(feedbackCheckpointKey);
+          sessionStorage.removeItem(this.activeSessionKey);
+          sessionStorage.removeItem(this.feedbackCheckpointKey);
+          if (error.status === 401 && this.accountOwned) this.requireSignIn();
         }
       });
     }
@@ -117,11 +130,15 @@ export class LocalLearning {
 
   protected start(): void {
     void this.run(async () => {
-      await firstValueFrom(this.http.post(`${api}/identity`, null, { headers: clientHeaders }));
+      if (!this.accountOwned) {
+        await firstValueFrom(
+          this.http.post(`${this.api}/identity`, null, { headers: clientHeaders }),
+        );
+      }
       const session = await firstValueFrom(
-        this.http.post<Session>(`${api}/sessions`, null, { headers: clientHeaders }),
+        this.http.post<Session>(`${this.api}/sessions`, null, { headers: clientHeaders }),
       );
-      sessionStorage.setItem(activeSessionKey, session.id);
+      sessionStorage.setItem(this.activeSessionKey, session.id);
       this.restoreSession(session);
       this.focusMain();
     });
@@ -158,7 +175,7 @@ export class LocalLearning {
     if (!this.latestSession) return;
 
     this.session.set(this.latestSession);
-    sessionStorage.removeItem(feedbackCheckpointKey);
+    sessionStorage.removeItem(this.feedbackCheckpointKey);
     this.latestSession = null;
     this.feedback.set(null);
     this.typed.set('');
@@ -172,12 +189,12 @@ export class LocalLearning {
     dialog.close();
     await this.run(async () => {
       const updated = await firstValueFrom(
-        this.http.post<Session>(`${api}/sessions/${session.id}/end`, null, {
+        this.http.post<Session>(`${this.api}/sessions/${session.id}/end`, null, {
           headers: clientHeaders,
         }),
       );
       this.session.set(updated);
-      sessionStorage.removeItem(feedbackCheckpointKey);
+      sessionStorage.removeItem(this.feedbackCheckpointKey);
       this.feedback.set(null);
       this.latestSession = null;
       this.pendingAttempt = null;
@@ -187,8 +204,8 @@ export class LocalLearning {
   }
 
   protected reset(): void {
-    sessionStorage.removeItem(activeSessionKey);
-    sessionStorage.removeItem(feedbackCheckpointKey);
+    sessionStorage.removeItem(this.activeSessionKey);
+    sessionStorage.removeItem(this.feedbackCheckpointKey);
     this.session.set(null);
     this.typed.set('');
     this.selected.set(null);
@@ -203,9 +220,13 @@ export class LocalLearning {
     void this.run(async () => {
       try {
         const response = await firstValueFrom(
-          this.http.post<AnswerResponse>(`${api}/sessions/${session.id}/answers`, attempt.answer, {
-            headers: { ...clientHeaders, 'Idempotency-Key': attempt.key },
-          }),
+          this.http.post<AnswerResponse>(
+            `${this.api}/sessions/${session.id}/answers`,
+            attempt.answer,
+            {
+              headers: { ...clientHeaders, 'Idempotency-Key': attempt.key },
+            },
+          ),
         );
         const checkpoint: FeedbackCheckpoint = {
           before: session,
@@ -214,7 +235,7 @@ export class LocalLearning {
           selected: this.selected(),
           typed: this.typed(),
         };
-        sessionStorage.setItem(feedbackCheckpointKey, JSON.stringify(checkpoint));
+        sessionStorage.setItem(this.feedbackCheckpointKey, JSON.stringify(checkpoint));
         this.showFeedback(checkpoint);
         this.pendingAttempt = null;
         this.canRetry.set(false);
@@ -225,7 +246,7 @@ export class LocalLearning {
           this.selected.set(null);
           if (error.status === 409 && error.error?.code === 'answer_conflict') {
             const current = await firstValueFrom(
-              this.http.get<Session>(`${api}/sessions/${session.id}`),
+              this.http.get<Session>(`${this.api}/sessions/${session.id}`),
             );
             this.session.set(current);
             this.typed.set('');
@@ -242,7 +263,7 @@ export class LocalLearning {
   }
 
   private restoreSession(current: Session): void {
-    const saved = sessionStorage.getItem(feedbackCheckpointKey);
+    const saved = sessionStorage.getItem(this.feedbackCheckpointKey);
     if (saved) {
       try {
         const checkpoint: FeedbackCheckpoint = JSON.parse(saved);
@@ -257,7 +278,7 @@ export class LocalLearning {
       } catch {
         // Drop unreadable browser state and use the persisted API state.
       }
-      sessionStorage.removeItem(feedbackCheckpointKey);
+      sessionStorage.removeItem(this.feedbackCheckpointKey);
     }
     this.session.set(current);
   }
@@ -268,11 +289,24 @@ export class LocalLearning {
     this.feedback.set(checkpoint.feedback);
     this.selected.set(checkpoint.selected);
     this.typed.set(checkpoint.typed);
-    afterNextRender(() => this.next()?.nativeElement.focus(), { injector: this.injector });
+    if (!this.destroyRef.destroyed) {
+      afterNextRender(() => this.next()?.nativeElement.focus(), { injector: this.injector });
+    }
   }
 
   private focusMain(): void {
-    afterNextRender(() => this.main()?.nativeElement.focus(), { injector: this.injector });
+    if (!this.destroyRef.destroyed) {
+      afterNextRender(() => this.main()?.nativeElement.focus(), { injector: this.injector });
+    }
+  }
+
+  private requireSignIn(): void {
+    this.reset();
+    this.latestSession = null;
+    this.pendingAttempt = null;
+    this.feedback.set(null);
+    this.canRetry.set(false);
+    this.signInRequired.set(true);
   }
 
   private async run(action: () => Promise<void>): Promise<void> {
@@ -282,6 +316,11 @@ export class LocalLearning {
     try {
       await action();
     } catch (error) {
+      if (this.accountOwned && error instanceof HttpErrorResponse && error.status === 401) {
+        this.requireSignIn();
+        return;
+      }
+
       const apiError = error instanceof HttpErrorResponse ? error.error : null;
       this.error.set(
         typeof apiError?.title === 'string' ? apiError.title : 'Nie udało się połączyć z serwerem.',

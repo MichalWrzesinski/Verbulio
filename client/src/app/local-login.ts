@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import { clearAccountLearningStorage } from './account-learning-storage';
 
 interface Account {
   id: string;
@@ -110,12 +111,16 @@ export class LocalLogin {
     this.notice.set('');
     try {
       await firstValueFrom(this.http.post(`${endpoint}/logout`, null, options));
-      this.account.set(null);
-      this.focusHeading();
+      this.signedOut();
     } catch {
       try {
-        this.account.set(await this.readSession());
-        this.focusHeading();
+        const account = await this.readSession();
+        if (account) {
+          this.account.set(account);
+          this.focusHeading();
+        } else {
+          this.signedOut();
+        }
       } catch {
         this.error.set('Nie udało się potwierdzić wylogowania.');
       }
@@ -126,9 +131,17 @@ export class LocalLogin {
     }
   }
 
+  private signedOut(): void {
+    clearAccountLearningStorage();
+    this.account.set(null);
+    this.focusHeading();
+  }
+
   private async restore(): Promise<void> {
     try {
-      this.account.set(await this.readSession());
+      const account = await this.readSession();
+      if (!account) clearAccountLearningStorage();
+      this.account.set(account);
     } catch {
       this.error.set('Nie udało się sprawdzić bieżącej sesji.');
     } finally {
