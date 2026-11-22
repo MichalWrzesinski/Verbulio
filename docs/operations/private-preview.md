@@ -12,34 +12,18 @@ bash scripts/build-preview.sh /tmp/verbulio-preview.tar.gz
 
 Record the archive checksum before transfer and verify it after transfer. The archive contains the portable .NET app, the Angular site and a `REVISION` file with the checkout commit. Certificates, credentials and database data are supplied separately.
 
-## Preview host
+## Deploy from GitHub Actions
 
-The package requires an ASP.NET Core 10 runtime, a dedicated PostgreSQL database and user, an HTTPS certificate valid for 127.0.0.1 and a persistent directory for the preview's key ring. Use a restrictive service user and an isolated installation directory. Preserve the existing placeholder and its installation.
+Use **Deploy private preview** from main with the ID of a successful CI push run on main. The workflow verifies the package revision, sends the package and Compose configuration over pinned SSH, migrates the preview database, starts the service and checks its HTTPS health endpoint. If the candidate fails to start or pass health checks, the deployment attempts to reactivate the preceding healthy app release from retained server files and otherwise stops the app. It does not roll back database changes. To select a prior compatible release intentionally, use the workflow with its CI run while the artifact is retained, or rerun that main CI run to rebuild the artifact. Verify database restoration separately before reverting across an incompatible schema change.
 
-Set the following environment values outside the release directory using a service configuration readable only by the operator and the service. In commands that start the app, use the extracted release as the working directory.
+Provision `/srv/Verbulio-preview` for the dedicated `deploy-verbulio` user. Give that account access to Docker as for the other application deploy accounts on the VPS. Install a dedicated restricted SSH public key for the account and store its private half as the Actions secret `PREVIEW_SSH_KEY`. This model gives the deploy key administrative-equivalent access to the Docker host. Keep it exclusive to this private repository and rotate it independently. The operator provisions the account once. All application files travel via GitHub Actions.
 
-| Setting | Value |
-| --- | --- |
-| `ASPNETCORE_ENVIRONMENT` | `Preview` |
-| `ConnectionStrings__Learning` | Connection string for the dedicated preview database |
-| `LearningKeyDirectory` | Absolute preview-only persistent key directory |
-| `ASPNETCORE_Kestrel__Certificates__Default__Path` | Path to the preview TLS certificate |
-| `ASPNETCORE_Kestrel__Certificates__Default__KeyPath` | Path to the private key for a PEM certificate |
+The preview uses a dedicated persistent PostgreSQL volume and persistent TLS and cookie keys. The application and database listen on host IPv4 loopback only. Keep both services off public listeners and the public reverse proxy. The preview uses test accounts and does not send email.
 
-Back up and verify restoration of the isolated database before updating a preview with data. Run `dotnet Verbulio.Api.dll --migrate`, then `dotnet Verbulio.Api.dll` with that configuration. The preview listens on the VPS IPv4 loopback on port 5443. Keep it off the public reverse proxy and firewall. The fixture accepts test accounts and has no transactional email delivery.
-
-From a machine with authorized SSH access, forward the port and visit `https://127.0.0.1:5443/` with the preview certificate trusted.
+From a machine with authorized operator SSH access, forward the port and visit `https://127.0.0.1:5443/` with the preview certificate trusted. Copy the replacement public certificate after a deployment reports renewal.
 
 ```sh
 ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:5443:127.0.0.1:5443 webhome-vps
 ```
 
-Check the health endpoint through the tunnel and complete placement, registration, login and a category session with test data. Revert by stopping the preview service and selecting the previous release, restoring the isolated database if the candidate changed the schema incompatibly. For the first preview, stopping the service withdraws access. Keep the public virtual host separate.
-
-## GitHub Actions transfer
-
-Run **Transfer private preview** from `main` with the ID of a successful CI push run on `main`. The workflow checks the repository, workflow, branch, event, result and packaged revision before SFTP transfer. The checksum appears last in `/srv/Verbulio-preview-sftp/incoming`. Verify it there before activation. A file ending in `.part` is an incomplete transfer. Package files are delivered to this directory exclusively by GitHub Actions.
-
-Provision a dedicated SSH key and store its private half as the repository Actions secret `PREVIEW_SFTP_KEY`. Install its public half in a root-owned authorized keys file with the `restrict` option. Scope the SSH server configuration to `Match User deploy-verbulio`, with public-key authentication only, `DisableForwarding yes`, `ForceCommand internal-sftp -d /` and the dedicated `AuthorizedKeysFile`. Set `ChrootDirectory /srv/Verbulio-preview-sftp`. The chroot and its path components belong to root and are writable only by root. The incoming directory belongs to `deploy-verbulio` and uses mode 0700. Check both configuration syntax and effective settings for the dedicated user before reloading SSH. Keep privileges for container activation separate from the SFTP account.
-
-CI transfer and runtime activation are separate operations. The transfer workflow only delivers candidate files. The first container setup and activation use the preview-only service and database, separately from the public Nginx site.
+Complete placement, registration, login and a category session through the tunnel after a deployment. To withdraw the preview without dropping its data, stop the `verbulio-preview` app container using Docker or stop the Compose project without removing volumes.

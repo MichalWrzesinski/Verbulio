@@ -1,4 +1,4 @@
-name: Transfer private preview
+name: Deploy private preview
 
 on:
   workflow_dispatch:
@@ -17,10 +17,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  transfer:
+  deploy:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PREVIEW_HOST: deploy-verbulio@151.240.121.172
     steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Verify the CI run and download its package
         env:
           GH_TOKEN: ${{ github.token }}
@@ -39,40 +45,34 @@ jobs:
           cd "$RUNNER_TEMP"
           gh run download "$CI_RUN_ID" --repo "$GITHUB_REPOSITORY" --name verbulio-preview
           [[ "$(tar -xOzf verbulio-preview.tar.gz ./REVISION)" == "$revision" ]]
-          filename="$revision-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz"
-          mv verbulio-preview.tar.gz "$filename"
-          sha256sum "$filename" > "$filename.sha256"
-          printf 'PREVIEW_FILENAME=%s\n' "$filename" >> "$GITHUB_ENV"
+          sha256sum verbulio-preview.tar.gz > SHA256SUMS
+          printf 'PREVIEW_REVISION=%s\n' "$revision" >> "$GITHUB_ENV"
 
-      - name: Transfer the verified package over SFTP
+      - name: Transfer the verified package and activate the preview
         env:
-          PREVIEW_SFTP_KEY: ${{ secrets.PREVIEW_SFTP_KEY }}
+          PREVIEW_SSH_KEY: ${{ secrets.PREVIEW_SSH_KEY }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "$PREVIEW_SFTP_KEY" ]]; then
-            printf 'Configure the dedicated PREVIEW_SFTP_KEY secret first.\n' >&2
+          if [[ -z "$PREVIEW_SSH_KEY" ]]; then
+            printf 'Configure the dedicated PREVIEW_SSH_KEY secret first.\n' >&2
             exit 1
           fi
-          cd "$RUNNER_TEMP"
           ssh_dir="$(mktemp -d)"
           trap 'rm -rf -- "$ssh_dir"' EXIT
           umask 077
-          printf '%s\n' "$PREVIEW_SFTP_KEY" > "$ssh_dir/identity"
-          unset PREVIEW_SFTP_KEY
+          printf '%s\n' "$PREVIEW_SSH_KEY" > "$ssh_dir/identity"
+          unset PREVIEW_SSH_KEY
           cat > "$ssh_dir/known_hosts" <<'KEY'
           151.240.121.172 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGYTMIG6vPOaHudYMg85u011tS/Shg2OBYDCTgWhBfxH
           KEY
-          sftp -F /dev/null -b - -i "$ssh_dir/identity" \
-            -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=10 \
-            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$ssh_dir/known_hosts" \
-            -o GlobalKnownHostsFile=/dev/null -o VerifyHostKeyDNS=no \
-            -o HostKeyAlgorithms=ssh-ed25519 \
-            deploy-verbulio@151.240.121.172 <<EOF_SFTP
-          cd incoming
-          put $PREVIEW_FILENAME $PREVIEW_FILENAME.part
-          rename $PREVIEW_FILENAME.part $PREVIEW_FILENAME
-          put $PREVIEW_FILENAME.sha256 $PREVIEW_FILENAME.sha256.part
-          rename $PREVIEW_FILENAME.sha256.part $PREVIEW_FILENAME.sha256
-          EOF_SFTP
-          printf 'Transferred %s\n' "$PREVIEW_FILENAME"
+          ssh_options=(-F /dev/null -i "$ssh_dir/identity"
+            -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=10
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$ssh_dir/known_hosts"
+            -o GlobalKnownHostsFile=/dev/null -o VerifyHostKeyDNS=no
+            -o HostKeyAlgorithms=ssh-ed25519)
+          remote="$(ssh "${ssh_options[@]}" "$PREVIEW_HOST" 'mktemp -d /srv/Verbulio-preview/.incoming.XXXXXXXX')"
+          [[ "$remote" =~ ^/srv/Verbulio-preview/\.incoming\.[A-Za-z0-9]{8}$ ]]
+          scp "${ssh_options[@]}" "$RUNNER_TEMP/verbulio-preview.tar.gz" "$RUNNER_TEMP/SHA256SUMS" \
+            scripts/preview/{compose.yaml,deploy.sh} "$PREVIEW_HOST:$remote/"
+          ssh "${ssh_options[@]}" "$PREVIEW_HOST" "bash '$remote/deploy.sh' '$remote/verbulio-preview.tar.gz' '$PREVIEW_REVISION' && rm -rf -- '$remote'"
