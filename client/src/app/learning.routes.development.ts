@@ -23,6 +23,11 @@ export const learningRoutes: Routes = [
     loadComponent: () => import('./local-learning').then((module) => module.LocalLearning),
   },
   {
+    path: 'profil',
+    title: 'Twój profil · Verbulio',
+    loadComponent: () => import('./local-profile').then((module) => module.LocalProfile),
+  },
+  {
     path: 'lokalna-nauka',
     title: 'Sesja nauki · Verbulio',
     loadComponent: () => import('./local-learning').then((module) => module.LocalLearning),

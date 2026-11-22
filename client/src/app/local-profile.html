@@ -1,0 +1,89 @@
+<div class="app">
+  <header class="form-top">
+    <a class="link back" routerLink="/logowanie">
+      <svg class="i" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path
+          d="M12.5 4.5L7 10l5.5 5.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+      Wróć
+    </a>
+  </header>
+  <main class="stack-l">
+    <h1 #heading class="h1" tabindex="-1">Twój profil</h1>
+    @if (profile(); as progress) {
+      @let total = progress.newWords + progress.learningWords + progress.masteredWords;
+      <dl class="stats">
+        <div class="stat">
+          <dt>Poziom początkowy</dt>
+          <dd class="stat-n">{{ progress.startingLevel }}</dd>
+        </div>
+      </dl>
+      <section class="prog-sec" aria-labelledby="profile-words">
+        <h2 class="prof-h" id="profile-words">
+          <span>Słówka z poziomu {{ progress.startingLevel }}</span
+          ><span>{{ total }}</span>
+        </h2>
+        @if (total > 0) {
+          <div class="stk" aria-hidden="true">
+            @if (progress.newWords) {
+              <span class="seg seg-new" [style.flex-grow]="progress.newWords"></span>
+            }
+            @if (progress.learningWords) {
+              <span class="seg seg-learn" [style.flex-grow]="progress.learningWords"></span>
+            }
+            @if (progress.masteredWords) {
+              <span class="seg seg-done" [style.flex-grow]="progress.masteredWords"></span>
+            }
+          </div>
+        }
+        <ul class="leg">
+          <li>
+            <b>{{ progress.newWords }}</b><span class="l"
+              ><span class="dot dot-new"></span>nowe</span
+            >
+          </li>
+          <li>
+            <b>{{ progress.learningWords }}</b><span class="l"
+              ><span class="dot dot-learn"></span>w nauce</span
+            >
+          </li>
+          <li>
+            <b>{{ progress.masteredWords }}</b><span class="l"
+              ><span class="dot dot-done"></span>opanowane</span
+            >
+          </li>
+        </ul>
+        @if (total > 0 && progress.newWords === total) {
+          <p class="small">Pierwsza sesja wypełni pasek.</p>
+        }
+      </section>
+    } @else if (state() === 'sign-in') {
+      <p class="lead">Zaloguj się, aby zobaczyć swój postęp.</p>
+      <a class="key btn btn--primary" routerLink="/logowanie">Zaloguj się</a>
+    } @else if (state() === 'error') {
+      <p class="fb fb--bad" role="alert">Nie udało się wczytać profilu.</p>
+      <button type="button" class="key btn btn--secondary" (click)="load()">
+        Spróbuj ponownie
+      </button>
+    } @else {
+      <p role="status">Wczytuję profil…</p>
+    }
+  </main>
+  @if (profile()) {
+    <div class="grow"></div>
+    <a class="key btn btn--primary" routerLink="/nauka">Ćwicz dalej</a>
+  }
+</div>
+<footer class="legal-footer">
+  <p>Copyright 2026 Verbulio</p>
+  <nav aria-label="Dokumenty prawne">
+    <a class="link" routerLink="/regulamin">Regulamin</a>
+    <a class="link" routerLink="/prywatnosc">Polityka prywatności</a>
+  </nav>
+</footer>
