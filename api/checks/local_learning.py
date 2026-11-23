@@ -726,6 +726,9 @@ basicConstraints = critical,CA:TRUE
                     wait_ready(server, base, tls)
                     exercise_account_deletion(command, env, deletion_container, owner, other, anonymous, login,
                                               account, other_account, placement[0])
+                    assert "Account deletion journal unavailable" in (Path(directory) / "api.log").read_text(
+                        encoding="utf-8"
+                    )
 
                 if previous_api := os.environ.get("VERBULIO_PREVIOUS_API_DLL"):
                     stop(server)

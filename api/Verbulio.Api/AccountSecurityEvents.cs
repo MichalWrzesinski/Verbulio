@@ -10,4 +10,7 @@ internal static partial class AccountSecurityEvents
 
     [LoggerMessage(8102, LogLevel.Warning, "Account session authorization denied")]
     internal static partial void SessionDenied(ILogger logger);
+
+    [LoggerMessage(8103, LogLevel.Warning, "Account deletion journal unavailable")]
+    internal static partial void DeletionJournalUnavailable(ILogger logger);
 }

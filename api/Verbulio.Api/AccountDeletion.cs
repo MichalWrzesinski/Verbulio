@@ -15,7 +15,8 @@ internal enum AccountDeletionResult
 }
 
 internal sealed class AccountDeletion(
-    NpgsqlDataSource dataSource, AccountDeletionJournal journal, IPasswordHasher<RegisteredAccount> passwordHasher)
+    NpgsqlDataSource dataSource, AccountDeletionJournal journal, IPasswordHasher<RegisteredAccount> passwordHasher,
+    ILogger<AccountDeletion> logger)
 {
     internal async Task<AccountDeletionResult> DeleteAsync(Guid owner, string password, CancellationToken cancellationToken)
     {
@@ -37,6 +38,7 @@ internal sealed class AccountDeletion(
         }
         catch (Exception error) when (error is NpgsqlException or TimeoutException)
         {
+            AccountSecurityEvents.DeletionJournalUnavailable(logger);
             return AccountDeletionResult.JournalUnavailable;
         }
 
