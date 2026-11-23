@@ -338,6 +338,11 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
         "startingLevel": "A1", "newWords": 24, "learningWords": 0, "masteredWords": 0, "streak": no_streak,
     }
     assert owner.request(profile_path, time_zone=session_zone) == fresh_profile
+    contact_path = ACCOUNT + "/settings/account"
+    guest.request(contact_path, 401)
+    anonymous.request(contact_path, 401)
+    assert owner.request(contact_path) == {"email": login["email"].lower()}
+    assert owner.request(contact_path + "?ownerId=" + other_account["id"]) == {"email": login["email"].lower()}
     settings_path = ACCOUNT + "/settings/learning"
     enabled = {"autoAdvance": True}
     disabled = {"autoAdvance": False}
@@ -392,6 +397,7 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     peer_login = {field: peer_registration[field] for field in ("email", "password")}
     assert peer.request(ACCOUNT + "/login", 200, "POST", peer_login) == peer_account
     assert peer.request(profile_path) == fresh_profile
+    assert peer.request(contact_path) == {"email": peer_registration["email"]}
     assert peer.request(settings_path) == disabled
     assert peer.request(settings_path, 200, "PUT", disabled) == disabled
     assert owner.request(settings_path) == enabled
@@ -426,6 +432,7 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     owner.request(ACCOUNT + "/logout", 204, "POST")
     owner.request(resource, 401)
     owner.request(profile_path, 401)
+    owner.request(contact_path, 401)
     owner.request(settings_path, 401)
     owner.request(settings_path, 401, "PUT", disabled)
     assert owner.request(ACCOUNT + "/login", 200, "POST", login) == account
