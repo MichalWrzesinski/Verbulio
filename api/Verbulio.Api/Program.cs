@@ -210,7 +210,7 @@ account.MapGet("/profile", async (HttpContext http, ClaimsPrincipal user, Sessio
 account.MapGet("/settings/account", async (ClaimsPrincipal user, AccountSettingsStore store,
     CancellationToken cancellationToken) =>
     await store.ReadContactAsync(Owner(user), cancellationToken) is { } contact
-        ? Results.Ok(contact)
+        ? Results.Ok(new { contact.Email, DeletionAvailable = !string.IsNullOrWhiteSpace(journalConnection) })
         : Results.Unauthorized())
     .RequireAuthorization(accountOnly);
 account.MapGet("/settings/learning", async (ClaimsPrincipal user, AccountSettingsStore store,
