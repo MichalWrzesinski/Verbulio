@@ -318,6 +318,11 @@ if (!string.IsNullOrWhiteSpace(journalConnection))
             return Problem(403, "invalid_account_password", "Nieprawidłowe hasło.");
         }
 
+        if (result == AccountDeletionResult.JournalUnavailable)
+        {
+            return Problem(503, "account_deletion_unavailable", "Usunięcie konta jest chwilowo niedostępne.");
+        }
+
         await http.SignOutAsync(accountScheme);
         return Results.NoContent();
     }).RequireAuthorization(accountOnly).RequireRateLimiting(loginLimit).AddEndpointFilter(RequireLocalClient);

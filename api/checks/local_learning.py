@@ -568,12 +568,16 @@ def exercise_account_deletion(command, env, container, owner, other, anonymous, 
     postgres("pg_dump", "-U", "postgres", "-d", "verbulio", "-Fc", "-f", dump)
     sql("verbulio_deletions", "ALTER TABLE verified_account_deletions RENAME TO unavailable_for_test")
     try:
-        owner.request(endpoint, 500, "POST", subject)
+        assert owner.request(endpoint, 503, "POST", subject)["code"] == "account_deletion_unavailable"
         assert sql("verbulio", inspection) == before
     finally:
         sql("verbulio_deletions", "ALTER TABLE unavailable_for_test RENAME TO verified_account_deletions")
 
-    owner.request(endpoint, 204, "POST", subject)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        deletion = pool.submit(owner.request, endpoint, 204, "POST", subject)
+        rotation = pool.submit(second.request, ACCOUNT + "/login", (200, 401, 409), "POST", login)
+        deletion.result(timeout=15)
+        rotation.result(timeout=15)
     for browser in (owner, second):
         browser.request(ACCOUNT + "/session", 401)
     owner.request(ACCOUNT + "/login", 401, "POST", login)

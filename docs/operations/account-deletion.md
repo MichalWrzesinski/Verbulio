@@ -6,7 +6,7 @@ The preview API enables the account deletion route only with a configured, indep
 
 Configure `ConnectionStrings__AccountDeletionJournal` for a dedicated PostgreSQL database outside the application database being restored. Specify distinct database names explicitly in both connection strings. The journal stores only account UUID and verified deletion request time. The deployment operator must preserve this database through every application backup and restore, control its credentials and agree retention covering all restorable application backups before enabling account deletion on a shared preview or public host.
 
-Run the existing `--migrate` command with both connections to initialize their schemas. A verified deletion is committed to the journal before the application data can be removed. A failure writing the journal leaves the application data untouched. If a verified intent was recorded and application deletion was interrupted, the same password-authenticated request can complete it while the account still exists.
+Run the existing `--migrate` command with both connections to initialize their schemas. A verified deletion is committed to the journal before the application data can be removed. A failure writing the journal returns a temporary-unavailability response and leaves the application data untouched. If a verified intent was recorded and application deletion was interrupted, the same password-authenticated request can complete it while the account still exists.
 
 ## Restore and replay
 

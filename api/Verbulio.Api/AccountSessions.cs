@@ -16,6 +16,33 @@ internal sealed class AccountSessions(NpgsqlDataSource dataSource, TimeProvider 
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        Guid? previousOwner = null;
+        if (previous is { } priorSession)
+        {
+            await using var lookup = new NpgsqlCommand(
+                "SELECT account_id FROM account_sessions WHERE id = $1", connection, transaction);
+            lookup.Parameters.AddWithValue(priorSession);
+            if (await lookup.ExecuteScalarAsync(cancellationToken) is not Guid owner) return null;
+            previousOwner = owner;
+        }
+
+        // Order both locks if this browser is switching accounts.
+        if (previousOwner is { } first && first.CompareTo(account) < 0)
+        {
+            await SessionStore.LockOwnerAsync(connection, transaction, first, cancellationToken);
+        }
+        await SessionStore.LockOwnerAsync(connection, transaction, account, cancellationToken);
+        if (previousOwner is { } last && last.CompareTo(account) > 0)
+        {
+            await SessionStore.LockOwnerAsync(connection, transaction, last, cancellationToken);
+        }
+
+        await using (var existing = new NpgsqlCommand("SELECT 1 FROM accounts WHERE id = $1", connection, transaction))
+        {
+            existing.Parameters.AddWithValue(account);
+            if (await existing.ExecuteScalarAsync(cancellationToken) is null) return null;
+        }
+
         if (previous is { } id)
         {
             await using var revoke = new NpgsqlCommand("DELETE FROM account_sessions WHERE id = $1", connection, transaction);

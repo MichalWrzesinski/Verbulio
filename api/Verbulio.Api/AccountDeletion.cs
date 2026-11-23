@@ -11,6 +11,7 @@ internal enum AccountDeletionResult
     Deleted,
     Missing,
     InvalidPassword,
+    JournalUnavailable,
 }
 
 internal sealed class AccountDeletion(
@@ -18,30 +19,29 @@ internal sealed class AccountDeletion(
 {
     internal async Task<AccountDeletionResult> DeleteAsync(Guid owner, string password, CancellationToken cancellationToken)
     {
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        await SessionStore.LockOwnerAsync(connection, transaction, owner, cancellationToken);
-
-        Guid placementId;
-        await using (var read = new NpgsqlCommand("""
-            SELECT placement_test_id, starting_level, password_hash FROM accounts WHERE id = $1 FOR UPDATE
-            """, connection, transaction))
+        await using (var read = dataSource.CreateCommand("SELECT starting_level, password_hash FROM accounts WHERE id = $1"))
         {
             read.Parameters.AddWithValue(owner);
             await using var reader = await read.ExecuteReaderAsync(cancellationToken);
             if (!await reader.ReadAsync(cancellationToken)) return AccountDeletionResult.Missing;
 
-            var account = new RegisteredAccount(owner, (VocabularyLevel)reader.GetInt32(1));
-            if (passwordHasher.VerifyHashedPassword(account, reader.GetString(2), password) == PasswordVerificationResult.Failed)
+            var account = new RegisteredAccount(owner, (VocabularyLevel)reader.GetInt32(0));
+            if (passwordHasher.VerifyHashedPassword(account, reader.GetString(1), password) == PasswordVerificationResult.Failed)
                 return AccountDeletionResult.InvalidPassword;
-
-            placementId = reader.GetGuid(0);
         }
 
-        // Record the verified deletion intent before committing changes to the restorable database.
-        await journal.RecordAsync(owner, cancellationToken);
-        await DeleteRowsAsync(connection, transaction, owner, placementId, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+        // Record the verified deletion intent before changing the restorable database.
+        try
+        {
+            await journal.RecordAsync(owner, cancellationToken);
+        }
+        catch (Exception error) when (error is NpgsqlException or TimeoutException)
+        {
+            return AccountDeletionResult.JournalUnavailable;
+        }
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await RemoveOwnerAsync(connection, owner, cancellationToken);
         return AccountDeletionResult.Deleted;
     }
 
@@ -51,18 +51,23 @@ internal sealed class AccountDeletion(
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         foreach (var owner in owners)
         {
-            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-            await SessionStore.LockOwnerAsync(connection, transaction, owner, cancellationToken);
-            await using var select = new NpgsqlCommand("""
-                SELECT placement_test_id FROM accounts WHERE id = $1 FOR UPDATE
-                """, connection, transaction);
-            select.Parameters.AddWithValue(owner);
-            if (await select.ExecuteScalarAsync(cancellationToken) is Guid placementId)
-            {
-                await DeleteRowsAsync(connection, transaction, owner, placementId, cancellationToken);
-            }
-            await transaction.CommitAsync(cancellationToken);
+            await RemoveOwnerAsync(connection, owner, cancellationToken);
         }
+    }
+
+    private static async Task RemoveOwnerAsync(NpgsqlConnection connection, Guid owner, CancellationToken cancellationToken)
+    {
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await SessionStore.LockOwnerAsync(connection, transaction, owner, cancellationToken);
+        await using var select = new NpgsqlCommand("""
+            SELECT placement_test_id FROM accounts WHERE id = $1 FOR UPDATE
+            """, connection, transaction);
+        select.Parameters.AddWithValue(owner);
+        if (await select.ExecuteScalarAsync(cancellationToken) is Guid placementId)
+        {
+            await DeleteRowsAsync(connection, transaction, owner, placementId, cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
     }
 
     private static async Task DeleteRowsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid owner,
