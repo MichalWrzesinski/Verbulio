@@ -10,9 +10,11 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { accountLearningStoragePrefix } from './account-learning-storage';
+import { LearningPreferences } from './learning-preferences';
 
 interface Question {
   number: number;
@@ -82,6 +84,9 @@ export class LocalLearning {
   private readonly http = inject(HttpClient);
   private readonly injector = inject(Injector);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly preferences = inject(LearningPreferences);
+  private autoAdvance = false;
+  private advanceTimer: ReturnType<typeof setTimeout> | undefined;
   protected readonly accountOwned = inject(ActivatedRoute).snapshot.data['accountOwned'] === true;
   private readonly api = this.accountOwned
     ? '/api/v1/local-account/learning'
@@ -128,6 +133,20 @@ export class LocalLearning {
   }
 
   constructor() {
+    this.destroyRef.onDestroy(() => this.cancelAdvance());
+    if (this.accountOwned) {
+      this.preferences
+        .read()
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: ({ autoAdvance }) => {
+            this.autoAdvance = autoAdvance;
+          },
+          error: () => {
+            this.autoAdvance = false;
+          },
+        });
+    }
     const saved = sessionStorage.getItem(this.activeSessionKey);
     if (saved) {
       void this.run(async () => {
@@ -238,6 +257,7 @@ export class LocalLearning {
   }
 
   protected advance(): void {
+    this.cancelAdvance();
     if (!this.latestSession) return;
 
     this.session.set(this.latestSession);
@@ -247,6 +267,11 @@ export class LocalLearning {
     this.typed.set('');
     this.selected.set(null);
     this.focusMain();
+  }
+
+  protected openExit(dialog: HTMLDialogElement): void {
+    this.cancelAdvance();
+    dialog.showModal();
   }
 
   protected async end(dialog: HTMLDialogElement): Promise<void> {
@@ -271,6 +296,7 @@ export class LocalLearning {
   }
 
   protected reset(): void {
+    this.cancelAdvance();
     sessionStorage.removeItem(this.activeSessionKey);
     sessionStorage.removeItem(this.feedbackCheckpointKey);
     this.session.set(null);
@@ -305,6 +331,15 @@ export class LocalLearning {
         };
         sessionStorage.setItem(this.feedbackCheckpointKey, JSON.stringify(checkpoint));
         this.showFeedback(checkpoint);
+        if (
+          this.autoAdvance &&
+          response.feedback.assessment.grade === 'Correct' &&
+          response.session.question
+        ) {
+          this.advanceTimer = setTimeout(() => {
+            if (!document.hidden) this.advance();
+          }, 1000);
+        }
         this.pendingAttempt = null;
         this.canRetry.set(false);
       } catch (error) {
@@ -362,6 +397,11 @@ export class LocalLearning {
     if (!this.destroyRef.destroyed) {
       afterNextRender(() => this.next()?.nativeElement.focus(), { injector: this.injector });
     }
+  }
+
+  private cancelAdvance(): void {
+    clearTimeout(this.advanceTimer);
+    this.advanceTimer = undefined;
   }
 
   private focusMain(): void {
