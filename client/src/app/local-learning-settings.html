@@ -1,112 +1,197 @@
-<div class="app">
-  <header class="form-top">
-    <a class="link back" routerLink="/profil">
-      <svg class="i" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-        <path
-          d="M12.5 4.5L7 10l5.5 5.5"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-      </svg>
-      Profil
-    </a>
-  </header>
-  <main class="stack-l">
-    <h1 #heading class="h1" tabindex="-1">Ustawienia</h1>
-    @if (signInRequired()) {
-      <p class="lead">Zaloguj się, aby zmienić ustawienia nauki.</p>
-      <a class="key btn btn--primary" routerLink="/logowanie">Zaloguj się</a>
-    } @else {
-      <div class="set">
-        <section class="set-sec" aria-labelledby="learning-settings">
-          <h2 id="learning-settings">Nauka</h2>
-          @if (enabled() !== null) {
-            <label class="sw">
-              <input
-                #switchControl
-                class="sw-in"
-                type="checkbox"
-                role="switch"
-                aria-labelledby="advance-label"
-                [attr.aria-describedby]="error() ? 'advance-note advance-error' : 'advance-note'"
-                [checked]="enabled()"
-                [attr.aria-disabled]="pending() || signingOut() || !!error()"
-                (click)="(pending() || signingOut() || error()) && $event.preventDefault()"
-                (change)="save(switchControl)"
-              />
-              <span class="sw-track" aria-hidden="true">
-                <span class="sw-k">
-                  <svg class="i" viewBox="0 0 20 20" focusable="false">
-                    <path
-                      d="M4.5 10l3.5 3.5 7.5-7.5"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2.8"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </span>
-              </span>
-              <span class="sw-b">
-                <span class="sw-t" id="advance-label"
-                  >Automatyczne przejście po poprawnej odpowiedzi</span
-                >
-                <span class="sw-s" id="advance-note"
-                  >Po „Dobrze!” następne słówko pojawia się samo po ok. 1 s.</span
-                >
-              </span>
-            </label>
-          }
-          @if (pending()) {
-            <p class="small" role="status">
-              {{ enabled() === null ? 'Wczytuję ustawienie…' : 'Zapisuję…' }}
-            </p>
-          } @else if (error()) {
-            <p class="fb fb--bad" id="advance-error" role="alert">{{ error() }}</p>
-            <button type="button" class="key btn btn--secondary" (click)="load()">
-              Odśwież ustawienie
-            </button>
-          } @else if (saved()) {
-            <p class="small" role="status">Ustawienie zapisane.</p>
-          }
-        </section>
-        <section class="set-sec" aria-labelledby="account-contact">
-          <h2 id="account-contact">Twoje dane</h2>
-          @if (email(); as address) {
-            <p class="kv">
-              <span>E-mail:&nbsp;</span><strong>{{ address }}</strong>
-            </p>
-          } @else if (contactError()) {
-            <p role="alert">Nie udało się wczytać adresu e-mail.</p>
-            <button type="button" class="key btn btn--secondary" (click)="loadContact()">
-              Spróbuj ponownie
-            </button>
-          } @else {
-            <p class="small" role="status">Wczytuję dane konta…</p>
-          }
-        </section>
-        <section class="set-sec" aria-labelledby="account-actions">
-          <h2 id="account-actions">Konto</h2>
-          <button
-            type="button"
-            class="key btn btn--secondary"
-            [disabled]="signingOut()"
-            (click)="logout()"
-          >
-            {{ signingOut() ? 'Wylogowuję…' : 'Wyloguj się' }}
-          </button>
-          @if (logoutError()) {
-            <p class="fb fb--bad" role="alert">{{ logoutError() }}</p>
-          }
-        </section>
+@if (deleted()) {
+  <div class="app">
+    <header class="topbar">
+      <a class="brand" routerLink="/" aria-label="Verbulio, strona startowa">
+        <img src="brand/logo-full.svg" alt="" />
+      </a>
+    </header>
+    <main class="focus-screen">
+      <div class="stack">
+        <h1 #heading class="h1" tabindex="-1">Konto usunięte</h1>
+        <p class="lead">Usunęliśmy Twoje konto, adres e-mail i historię nauki.</p>
       </div>
-    }
-  </main>
-</div>
+    </main>
+    <a class="key btn btn--secondary" routerLink="/">Wróć na stronę startową</a>
+  </div>
+} @else {
+  <div class="app">
+    <header class="form-top">
+      <a class="link back" routerLink="/profil">
+        <svg class="i" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+          <path
+            d="M12.5 4.5L7 10l5.5 5.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        Profil
+      </a>
+    </header>
+    <main class="stack-l">
+      <h1 #heading class="h1" tabindex="-1">Ustawienia</h1>
+      @if (signInRequired()) {
+        <p class="lead">
+          @if (deletionUnconfirmed()) {
+            Nie udało się potwierdzić usunięcia konta. Zaloguj się, aby sprawdzić dostęp.
+          } @else {
+            Zaloguj się, aby zmienić ustawienia nauki.
+          }
+        </p>
+        <a class="key btn btn--primary" routerLink="/logowanie">Zaloguj się</a>
+      } @else {
+        <div class="set">
+          <section class="set-sec" aria-labelledby="learning-settings">
+            <h2 id="learning-settings">Nauka</h2>
+            @if (enabled() !== null) {
+              <label class="sw">
+                <input
+                  #switchControl
+                  class="sw-in"
+                  type="checkbox"
+                  role="switch"
+                  aria-labelledby="advance-label"
+                  [attr.aria-describedby]="error() ? 'advance-note advance-error' : 'advance-note'"
+                  [checked]="enabled()"
+                  [attr.aria-disabled]="pending() || signingOut() || !!error()"
+                  (click)="(pending() || signingOut() || error()) && $event.preventDefault()"
+                  (change)="save(switchControl)"
+                />
+                <span class="sw-track" aria-hidden="true">
+                  <span class="sw-k">
+                    <svg class="i" viewBox="0 0 20 20" focusable="false">
+                      <path
+                        d="M4.5 10l3.5 3.5 7.5-7.5"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </span>
+                </span>
+                <span class="sw-b">
+                  <span class="sw-t" id="advance-label"
+                    >Automatyczne przejście po poprawnej odpowiedzi</span
+                  >
+                  <span class="sw-s" id="advance-note"
+                    >Po „Dobrze!” następne słówko pojawia się samo po ok. 1 s.</span
+                  >
+                </span>
+              </label>
+            }
+            @if (pending()) {
+              <p class="small" role="status">
+                {{ enabled() === null ? 'Wczytuję ustawienie…' : 'Zapisuję…' }}
+              </p>
+            } @else if (error()) {
+              <p class="fb fb--bad" id="advance-error" role="alert">{{ error() }}</p>
+              <button type="button" class="key btn btn--secondary" (click)="load()">
+                Odśwież ustawienie
+              </button>
+            } @else if (saved()) {
+              <p class="small" role="status">Ustawienie zapisane.</p>
+            }
+          </section>
+          <section class="set-sec" aria-labelledby="account-contact">
+            <h2 id="account-contact">Twoje dane</h2>
+            @if (email(); as address) {
+              <p class="kv">
+                <span>E-mail:&nbsp;</span><strong>{{ address }}</strong>
+              </p>
+            } @else if (contactError()) {
+              <p role="alert">Nie udało się wczytać adresu e-mail.</p>
+              <button type="button" class="key btn btn--secondary" (click)="loadContact()">
+                Spróbuj ponownie
+              </button>
+            } @else {
+              <p class="small" role="status">Wczytuję dane konta…</p>
+            }
+          </section>
+          <section class="set-sec" aria-labelledby="account-actions">
+            <h2 id="account-actions">Konto</h2>
+            <button
+              type="button"
+              class="key btn btn--secondary"
+              [disabled]="signingOut()"
+              (click)="logout()"
+            >
+              {{ signingOut() ? 'Wylogowuję…' : 'Wyloguj się' }}
+            </button>
+            @if (deletionAvailable()) {
+              <button
+                type="button"
+                class="link link--danger set-danger"
+                aria-haspopup="dialog"
+                [disabled]="signingOut() || deleting()"
+                (click)="openDeleteDialog(deleteDialog, deletePassword)"
+              >
+                Usuń konto
+              </button>
+            }
+            @if (logoutError()) {
+              <p class="fb fb--bad" role="alert">{{ logoutError() }}</p>
+            }
+          </section>
+        </div>
+      }
+    </main>
+  </div>
+  <dialog
+    #deleteDialog
+    class="dialog"
+    role="alertdialog"
+    aria-labelledby="delete-title"
+    aria-describedby="delete-description"
+    (cancel)="guardDeleteDialogCancel($event)"
+    (close)="!deleteDialog.open && resetDeleteDialog(deletePassword)"
+  >
+    <h2 id="delete-title">Usunąć konto?</h2>
+    <p id="delete-description">
+      Usuniemy <span class="nw">e-mail,</span> hasło i całą historię nauki. Tego nie da się cofnąć.
+    </p>
+    <form
+      class="stack"
+      [attr.aria-busy]="deleting()"
+      (submit)="confirmDeletion($event, deleteDialog, deletePassword)"
+    >
+      <label class="field">
+        <span class="fld-l">Aktualne hasło</span>
+        <input
+          #deletePassword
+          class="key inp"
+          type="password"
+          autocomplete="current-password"
+          required
+          maxlength="256"
+          [readOnly]="deleting()"
+          [attr.aria-invalid]="wrongPassword() ? 'true' : null"
+          [attr.aria-describedby]="deleteError() ? 'delete-error' : null"
+        />
+      </label>
+      @if (deleteError()) {
+        <p class="fb fb--bad" id="delete-error" role="alert">{{ deleteError() }}</p>
+      }
+      <div class="actions">
+        <button type="submit" class="key btn btn--danger" [disabled]="deleting()">
+          {{ deleting() ? 'Usuwam konto…' : 'Usuń konto na zawsze' }}
+        </button>
+        <button
+          type="button"
+          class="key btn btn--primary"
+          autofocus
+          [disabled]="deleting()"
+          (click)="deleteDialog.close()"
+        >
+          Zostaw konto
+        </button>
+      </div>
+    </form>
+  </dialog>
+}
 <footer class="legal-footer">
   <p>Copyright 2026 Verbulio</p>
   <nav aria-label="Dokumenty prawne">

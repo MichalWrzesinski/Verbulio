@@ -322,7 +322,7 @@ def finish_account_session(browser, login, expected, other, other_email, other_a
     assert results[-1] is None
 
 
-def exercise_account_learning(owner, other, anonymous, login, account, other_email, other_account):
+def exercise_account_learning(owner, other, anonymous, login, account, other_email, other_account, deletion_available):
     guest = Browser(owner.base, owner.tls)
     guest.request(IDENTITY, 204, "POST")
     guest.request(ACCOUNT_LEARNING, 401, "POST")
@@ -341,8 +341,9 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     contact_path = ACCOUNT + "/settings/account"
     guest.request(contact_path, 401)
     anonymous.request(contact_path, 401)
-    assert owner.request(contact_path) == {"email": login["email"].lower()}
-    assert owner.request(contact_path + "?ownerId=" + other_account["id"]) == {"email": login["email"].lower()}
+    contact = {"email": login["email"].lower(), "deletionAvailable": deletion_available}
+    assert owner.request(contact_path) == contact
+    assert owner.request(contact_path + "?ownerId=" + other_account["id"]) == contact
     settings_path = ACCOUNT + "/settings/learning"
     enabled = {"autoAdvance": True}
     disabled = {"autoAdvance": False}
@@ -397,7 +398,7 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     peer_login = {field: peer_registration[field] for field in ("email", "password")}
     assert peer.request(ACCOUNT + "/login", 200, "POST", peer_login) == peer_account
     assert peer.request(profile_path) == fresh_profile
-    assert peer.request(contact_path) == {"email": peer_registration["email"]}
+    assert peer.request(contact_path) == {"email": peer_registration["email"], "deletionAvailable": deletion_available}
     assert peer.request(settings_path) == disabled
     assert peer.request(settings_path, 200, "PUT", disabled) == disabled
     assert owner.request(settings_path) == enabled
@@ -689,7 +690,8 @@ basicConstraints = critical,CA:TRUE
                 finish_placement(owner, *placement)
                 email, account, other_email, other_account = exercise_registration(owner, other, anonymous, placement[0])
                 login = start_account_session(owner, other, anonymous, email, account)
-                exercise_account_learning(owner, other, anonymous, login, account, other_email, other_account)
+                exercise_account_learning(owner, other, anonymous, login, account, other_email, other_account,
+                                          bool(env.get("ConnectionStrings__AccountDeletionJournal", "").strip()))
                 exercise_account_export(command, env, directory, account, email, other_account, other_email)
                 assert owner.request(resource) == accepted["session"]
                 assert owner.request(resource + "/answers", 200, "POST", submission, key) == accepted
