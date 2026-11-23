@@ -198,8 +198,8 @@ export class LocalLearningSettings {
         ),
       );
       if (response.status !== 204) throw new Error('Unconfirmed deletion');
-      if (this.destroyRef.destroyed) return;
       clearAccountLearningStorage();
+      if (this.destroyRef.destroyed) return;
       this.email.set(null);
       this.enabled.set(null);
       dialog.close();
