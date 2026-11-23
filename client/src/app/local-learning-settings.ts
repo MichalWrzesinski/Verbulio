@@ -168,6 +168,10 @@ export class LocalLearningSettings {
     }
   }
 
+  protected guardDeleteDialogCancel(event: Event): void {
+    if (this.deleting()) event.preventDefault();
+  }
+
   protected resetDeleteDialog(password: HTMLInputElement): void {
     password.value = '';
     this.deleteError.set('');

@@ -146,7 +146,7 @@
     role="alertdialog"
     aria-labelledby="delete-title"
     aria-describedby="delete-description"
-    (cancel)="deleting() && $event.preventDefault()"
+    (cancel)="guardDeleteDialogCancel($event)"
     (close)="resetDeleteDialog(deletePassword)"
   >
     <h2 id="delete-title">Usunąć konto?</h2>
