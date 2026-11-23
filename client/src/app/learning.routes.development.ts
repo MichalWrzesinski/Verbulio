@@ -28,6 +28,12 @@ export const learningRoutes: Routes = [
     loadComponent: () => import('./local-profile').then((module) => module.LocalProfile),
   },
   {
+    path: 'ustawienia',
+    title: 'Ustawienia · Verbulio',
+    loadComponent: () =>
+      import('./local-learning-settings').then((module) => module.LocalLearningSettings),
+  },
+  {
     path: 'lokalna-nauka',
     title: 'Sesja nauki · Verbulio',
     loadComponent: () => import('./local-learning').then((module) => module.LocalLearning),

@@ -201,7 +201,7 @@ body {
   flex-direction: column;
   min-height: 100svh;
 }
-:is(app-landing, app-local-learning, app-local-placement, app-local-registration, app-local-login, app-local-profile) > .legal-footer {
+:is(app-landing, app-local-learning, app-local-placement, app-local-registration, app-local-login, app-local-profile, app-local-learning-settings) > .legal-footer {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -226,7 +226,7 @@ body {
 .legal-footer .link:hover { color: var(--yellow); text-decoration-thickness: 2px; }
 .legal-footer .link:focus-visible { outline-color: var(--paper); }
 @media (forced-colors: active) {
-  :is(app-landing, app-local-learning, app-local-placement, app-local-registration, app-local-login, app-local-profile) > .legal-footer { text-shadow: none; }
+  :is(app-landing, app-local-learning, app-local-placement, app-local-registration, app-local-login, app-local-profile, app-local-learning-settings) > .legal-footer { text-shadow: none; }
   .legal-footer .link:focus-visible { outline-color: Highlight; }
 }
 .app, .site, .ix, .pi {

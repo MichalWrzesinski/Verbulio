@@ -1,0 +1,87 @@
+<div class="app">
+  <header class="form-top">
+    <a class="link back" routerLink="/profil">
+      <svg class="i" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path
+          d="M12.5 4.5L7 10l5.5 5.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+      Profil
+    </a>
+  </header>
+  <main class="stack-l">
+    <h1 #heading class="h1" tabindex="-1">Ustawienia</h1>
+    @if (signInRequired()) {
+      <p class="lead">Zaloguj się, aby zmienić ustawienia nauki.</p>
+      <a class="key btn btn--primary" routerLink="/logowanie">Zaloguj się</a>
+    } @else {
+      <div class="set">
+        <section class="set-sec" aria-labelledby="learning-settings">
+          <h2 id="learning-settings">Nauka</h2>
+          @if (enabled() !== null) {
+            <label class="sw">
+              <input
+                #switchControl
+                class="sw-in"
+                type="checkbox"
+                role="switch"
+                aria-labelledby="advance-label"
+                aria-describedby="advance-note"
+                [checked]="enabled()"
+                [attr.aria-disabled]="pending() || !!error()"
+                (click)="(pending() || error()) && $event.preventDefault()"
+                (change)="save(switchControl)"
+              />
+              <span class="sw-track" aria-hidden="true">
+                <span class="sw-k">
+                  <svg class="i" viewBox="0 0 20 20" focusable="false">
+                    <path
+                      d="M4.5 10l3.5 3.5 7.5-7.5"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+              </span>
+              <span class="sw-b">
+                <span class="sw-t" id="advance-label"
+                  >Automatyczne przejście po poprawnej odpowiedzi</span
+                >
+                <span class="sw-s" id="advance-note"
+                  >Po „Dobrze!” następne słówko pojawia się samo po ok. 1 s.</span
+                >
+              </span>
+            </label>
+          }
+          @if (pending()) {
+            <p class="small" role="status">
+              {{ enabled() === null ? 'Wczytuję ustawienie…' : 'Zapisuję…' }}
+            </p>
+          } @else if (error()) {
+            <p class="fb fb--bad" role="alert">{{ error() }}</p>
+            <button type="button" class="key btn btn--secondary" (click)="load()">
+              Odśwież ustawienie
+            </button>
+          } @else if (saved()) {
+            <p class="small" role="status">Ustawienie zapisane.</p>
+          }
+        </section>
+      </div>
+    }
+  </main>
+</div>
+<footer class="legal-footer">
+  <p>Copyright 2026 Verbulio</p>
+  <nav aria-label="Dokumenty prawne">
+    <a class="link" routerLink="/regulamin">Regulamin</a>
+    <a class="link" routerLink="/prywatnosc">Polityka prywatności</a>
+  </nav>
+</footer>

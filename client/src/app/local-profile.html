@@ -13,6 +13,9 @@
       </svg>
       Wróć
     </a>
+    @if (profile()) {
+      <a class="link" routerLink="/ustawienia">Ustawienia</a>
+    }
   </header>
   <main class="stack-l">
     <h1 #heading class="h1" tabindex="-1">Twój profil</h1>
