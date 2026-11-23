@@ -45,6 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ConnectionStrings__Learning: Host=127.0.0.1;Port=5432;Database=verbulio;Username=postgres;Password=local-ci-fixture
+      ConnectionStrings__AccountDeletionJournal: Host=127.0.0.1;Port=5432;Database=verbulio_deletions;Username=postgres;Password=local-ci-fixture
     services:
       postgres:
         image: postgres:18-alpine
@@ -76,3 +77,5 @@ jobs:
       - run: dotnet test Verbulio.Learning.Tests -c Release --no-restore
       - run: dotnet build Verbulio.Api -c Release --no-restore
       - run: python3 checks/local_learning.py
+        env:
+          VERBULIO_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}

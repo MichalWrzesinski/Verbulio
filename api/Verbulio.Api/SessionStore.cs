@@ -45,10 +45,12 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        await using (var gate = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", connection, transaction))
+        await LockOwnerAsync(connection, transaction, owner, cancellationToken);
+        if (startingLevel is not null)
         {
-            gate.Parameters.AddWithValue(owner.ToString());
-            await gate.ExecuteNonQueryAsync(cancellationToken);
+            await using var account = new NpgsqlCommand("SELECT 1 FROM accounts WHERE id = $1", connection, transaction);
+            account.Parameters.AddWithValue(owner);
+            if (await account.ExecuteScalarAsync(cancellationToken) is null) return null;
         }
 
         await using (var existing = new NpgsqlCommand(
@@ -84,6 +86,14 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
         await insert.ExecuteNonQueryAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return View(sessionId, state.Reconstitute(), state.Category);
+    }
+
+    internal static async Task LockOwnerAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid owner,
+        CancellationToken cancellationToken)
+    {
+        await using var gate = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", connection, transaction);
+        gate.Parameters.AddWithValue(owner.ToString());
+        await gate.ExecuteNonQueryAsync(cancellationToken);
     }
 
     internal async Task<ProfileProgressView> ProfileProgressAsync(Guid owner, VocabularyLevel startingLevel,
@@ -161,6 +171,10 @@ internal sealed class SessionStore(NpgsqlDataSource dataSource, TimeProvider tim
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        if (accountTimeZone is not null)
+        {
+            await LockOwnerAsync(connection, transaction, owner, cancellationToken);
+        }
         var state = await LoadAsync(connection, transaction, owner, id, cancellationToken);
         if (state is null)
         {
