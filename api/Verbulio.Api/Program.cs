@@ -27,6 +27,7 @@ var connectionString = builder.Configuration.GetConnectionString("Learning")
 builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<SessionStore>();
+builder.Services.AddSingleton<LearningPreferencesStore>();
 builder.Services.AddSingleton<GuestPlacementStore>();
 builder.Services.AddSingleton<RegistrationStore>();
 builder.Services.AddSingleton<AccountCredentials>();
@@ -194,6 +195,24 @@ var accountOnly = new AuthorizeAttribute { AuthenticationSchemes = accountScheme
 account.MapGet("/profile", async (HttpContext http, ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
     Results.Ok(await store.ProfileProgressAsync(Owner(user), StartingLevel(user), BrowserTimeZone(http), cancellationToken)))
     .RequireAuthorization(accountOnly);
+account.MapGet("/settings/learning", async (ClaimsPrincipal user, LearningPreferencesStore store,
+    CancellationToken cancellationToken) =>
+    await store.ReadAsync(Owner(user), cancellationToken) is { } preferences
+        ? Results.Ok(preferences)
+        : Results.Unauthorized())
+    .RequireAuthorization(accountOnly);
+account.MapPut("/settings/learning", async (LearningPreferencesUpdate update, ClaimsPrincipal user,
+    LearningPreferencesStore store, CancellationToken cancellationToken) =>
+{
+    if (update.AutoAdvance is not { } enabled)
+    {
+        return Problem(400, "invalid_learning_preference", "Wybierz ustawienie automatycznego przejścia.");
+    }
+
+    return await store.SaveAsync(Owner(user), enabled, cancellationToken) is { } preferences
+        ? Results.Ok(preferences)
+        : Results.Unauthorized();
+}).RequireAuthorization(accountOnly).AddEndpointFilter(RequireLocalClient);
 account.MapGet("/learning/categories", async (ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
     Results.Ok(await store.CategoriesAsync(Owner(user), StartingLevel(user), cancellationToken)))
     .RequireAuthorization(accountOnly);

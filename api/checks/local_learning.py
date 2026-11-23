@@ -41,8 +41,9 @@ class Browser:
             urllib.request.HTTPSHandler(context=tls),
         )
 
-    def request(self, path, status=200, method="GET", body=None, key=None, include_cookie_headers=False, time_zone=None):
-        headers = {"X-Verbulio-Client": "local-learning"}
+    def request(self, path, status=200, method="GET", body=None, key=None, include_cookie_headers=False, time_zone=None,
+                include_local_client=True):
+        headers = {"X-Verbulio-Client": "local-learning"} if include_local_client else {}
         data = None
         if time_zone:
             headers["X-Verbulio-Time-Zone"] = time_zone
@@ -337,6 +338,21 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
         "startingLevel": "A1", "newWords": 24, "learningWords": 0, "masteredWords": 0, "streak": no_streak,
     }
     assert owner.request(profile_path, time_zone=session_zone) == fresh_profile
+    settings_path = ACCOUNT + "/settings/learning"
+    enabled = {"autoAdvance": True}
+    disabled = {"autoAdvance": False}
+    for browser in (guest, anonymous):
+        browser.request(settings_path, 401)
+        browser.request(settings_path, 401, "PUT", enabled)
+    assert owner.request(settings_path) == disabled
+    owner.request(settings_path, 403, "PUT", enabled, include_local_client=False)
+    owner.request(settings_path, 400, "PUT", {})
+    owner.request(settings_path, 400, "PUT", {"autoAdvance": None})
+    owner.request(settings_path, 400, "PUT", {"autoAdvance": True, "ownerId": str(uuid.uuid4())})
+    assert owner.request(settings_path) == disabled
+    assert owner.request(settings_path, 200, "PUT", enabled) == enabled
+    assert owner.request(settings_path, 200, "PUT", enabled) == enabled
+
     categories_path = ACCOUNT + "/learning/categories"
     guest.request(categories_path, 401)
     anonymous.request(categories_path, 401)
@@ -376,6 +392,9 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     peer_login = {field: peer_registration[field] for field in ("email", "password")}
     assert peer.request(ACCOUNT + "/login", 200, "POST", peer_login) == peer_account
     assert peer.request(profile_path) == fresh_profile
+    assert peer.request(settings_path) == disabled
+    assert peer.request(settings_path, 200, "PUT", disabled) == disabled
+    assert owner.request(settings_path) == enabled
     assert owner.request(food_path, 409, "POST")["code"] == "no_words_available"
     assert {"id": "jedzenie", "title": "Jedzenie", "availableWords": 0} in owner.request(categories_path)
 
@@ -407,7 +426,12 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     owner.request(ACCOUNT + "/logout", 204, "POST")
     owner.request(resource, 401)
     owner.request(profile_path, 401)
+    owner.request(settings_path, 401)
+    owner.request(settings_path, 401, "PUT", disabled)
     assert owner.request(ACCOUNT + "/login", 200, "POST", login) == account
+    assert owner.request(settings_path) == enabled
+    assert owner.request(settings_path, 200, "PUT", disabled) == disabled
+    assert owner.request(settings_path) == disabled
     assert owner.request(profile_path, time_zone=session_zone) == food_profile | {"newWords": 18, "learningWords": 6}
     separate_resource = f"{ACCOUNT_LEARNING}/{separate['id']}"
     assert other.request(separate_resource) == separate
