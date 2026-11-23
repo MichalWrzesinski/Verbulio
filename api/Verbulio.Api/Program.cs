@@ -31,6 +31,12 @@ if (!builder.Environment.IsDevelopment() && !preview)
 var connectionString = builder.Configuration.GetConnectionString("Learning")
     ?? throw new InvalidOperationException("Configure the local Learning database connection.");
 builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
+var journalConnection = builder.Configuration.GetConnectionString("AccountDeletionJournal");
+if (!string.IsNullOrWhiteSpace(journalConnection))
+{
+    builder.Services.AddSingleton(_ => new AccountDeletionJournal(connectionString, journalConnection));
+    builder.Services.AddSingleton<AccountDeletion>();
+}
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<SessionStore>();
 builder.Services.AddSingleton<AccountSettingsStore>();
@@ -289,6 +295,47 @@ account.MapPost("/logout", async (HttpContext http, AccountSessions store, Cance
     return Results.NoContent();
 }).RequireAuthorization(accountOnly).AddEndpointFilter(RequireLocalClient);
 
+if (!string.IsNullOrWhiteSpace(journalConnection))
+{
+    account.MapPost("/delete", async (AccountDeletionRequest request, HttpContext http, AccountDeletion deletion,
+        PartitionedRateLimiter<string> ownerLimiter, CancellationToken cancellationToken) =>
+    {
+        var owner = Owner(http.User);
+        using var attempt = await ownerLimiter.AcquireAsync($"delete:{owner:D}", 1, cancellationToken);
+        if (!attempt.IsAcquired)
+        {
+            return Problem(429, "account_deletion_rate_limited", "Za dużo prób. Spróbuj ponownie za chwilę.");
+        }
+
+        if (request.Password is not { Length: > 0 and <= 256 } password)
+        {
+            return Problem(400, "invalid_account_deletion", "Podaj hasło do konta.");
+        }
+
+        var result = await deletion.DeleteAsync(owner, password, cancellationToken);
+        if (result == AccountDeletionResult.InvalidPassword)
+        {
+            return Problem(403, "invalid_account_password", "Nieprawidłowe hasło.");
+        }
+
+        if (result == AccountDeletionResult.JournalUnavailable)
+        {
+            return Problem(503, "account_deletion_unavailable", "Usunięcie konta jest chwilowo niedostępne.");
+        }
+
+        await http.SignOutAsync(accountScheme);
+        return Results.NoContent();
+    }).RequireAuthorization(accountOnly).RequireRateLimiting(loginLimit).AddEndpointFilter(RequireLocalClient);
+}
+
+if (args.Contains("--replay-account-deletions", StringComparer.Ordinal))
+{
+    var deletion = app.Services.GetService<AccountDeletion>()
+        ?? throw new InvalidOperationException("Configure the independent account deletion journal.");
+    await deletion.ReplayAsync(CancellationToken.None);
+    return;
+}
+
 if (args.Contains("--migrate", StringComparer.Ordinal))
 {
     var dataSource = app.Services.GetRequiredService<NpgsqlDataSource>();
@@ -306,6 +353,10 @@ if (args.Contains("--migrate", StringComparer.Ordinal))
         await migration.ExecuteNonQueryAsync();
     }
     await transaction.CommitAsync();
+    if (app.Services.GetService<AccountDeletionJournal>() is { } journal)
+    {
+        await journal.InitializeAsync(CancellationToken.None);
+    }
     return;
 }
 

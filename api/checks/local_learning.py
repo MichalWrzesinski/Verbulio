@@ -532,6 +532,74 @@ def exercise_account_export(command, env, directory, account, email, other_accou
     assert not list(Path(directory).glob(".verbulio-export-*.tmp"))
 
 
+def exercise_account_deletion(command, env, container, owner, other, anonymous, login, account, other_account, placement):
+    def postgres(*args):
+        return subprocess.check_output(["docker", "exec", container, *args], text=True, timeout=30).strip()
+
+    def sql(database, statement):
+        return postgres("psql", "-U", "postgres", "-d", database, "-At", "-v", "ON_ERROR_STOP=1", "-c", statement)
+
+    endpoint = ACCOUNT + "/delete"
+    owner_id = account["id"]
+    peer_id = other_account["id"]
+    placement_id = placement.rsplit("/", 1)[-1]
+    subject = {"password": login["password"]}
+    anonymous.request(endpoint, 401, "POST", subject)
+    # The earlier rotation race may leave its original browser with a stale cookie.
+    owner = Browser(owner.base, owner.tls)
+    assert owner.request(ACCOUNT + "/login", 200, "POST", login) == account
+    second = Browser(owner.base, owner.tls)
+    assert second.request(ACCOUNT + "/login", 200, "POST", login) == account
+    owner.request(endpoint, 403, "POST", subject, include_local_client=False)
+    assert owner.request(endpoint, 403, "POST", {"password": "wrong password"})["code"] == "invalid_account_password"
+    owner.request(endpoint, 400, "POST", {**subject, "ownerId": peer_id})
+
+    inspection = f"""
+        SELECT
+            (SELECT count(*) FROM accounts WHERE id = '{owner_id}'),
+            (SELECT count(*) FROM account_sessions WHERE account_id = '{owner_id}'),
+            (SELECT count(*) FROM learning_sessions WHERE owner_id = '{owner_id}'),
+            (SELECT count(*) FROM word_progress WHERE owner_id = '{owner_id}'),
+            (SELECT count(*) FROM learning_days WHERE owner_id = '{owner_id}'),
+            (SELECT count(*) FROM guest_placement_tests WHERE id = '{placement_id}'),
+            (SELECT count(*) FROM accounts WHERE id = '{peer_id}');
+    """
+    before = sql("verbulio", inspection)
+    assert all(int(count) > 0 for count in before.split("|"))
+    dump = "/tmp/verbulio-deletion-fixture.dump"
+    postgres("pg_dump", "-U", "postgres", "-d", "verbulio", "-Fc", "-f", dump)
+    sql("verbulio_deletions", "ALTER TABLE verified_account_deletions RENAME TO unavailable_for_test")
+    try:
+        assert owner.request(endpoint, 503, "POST", subject)["code"] == "account_deletion_unavailable"
+        assert sql("verbulio", inspection) == before
+    finally:
+        sql("verbulio_deletions", "ALTER TABLE unavailable_for_test RENAME TO verified_account_deletions")
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        deletion = pool.submit(owner.request, endpoint, 204, "POST", subject)
+        rotation = pool.submit(second.request, ACCOUNT + "/login", (200, 401, 409), "POST", login)
+        deletion.result(timeout=15)
+        rotation.result(timeout=15)
+    for browser in (owner, second):
+        browser.request(ACCOUNT + "/session", 401)
+    owner.request(ACCOUNT + "/login", 401, "POST", login)
+    assert other.request(ACCOUNT + "/session") == other_account
+    after = "0|0|0|0|0|0|1"
+    assert sql("verbulio", inspection) == after
+    assert sql("verbulio_deletions", "SELECT account_id FROM verified_account_deletions") == owner_id
+
+    postgres("createdb", "-U", "postgres", "verbulio_restore")
+    postgres("pg_restore", "-U", "postgres", "-d", "verbulio_restore", "--exit-on-error", dump)
+    assert sql("verbulio_restore", inspection) == before
+    restore_connection = env["ConnectionStrings__Learning"].replace("Database=verbulio;", "Database=verbulio_restore;")
+    assert restore_connection != env["ConnectionStrings__Learning"]
+    restore_env = env | {"ConnectionStrings__Learning": restore_connection}
+    for _ in range(2):
+        subprocess.run([*command, "--replay-account-deletions"], env=restore_env, cwd=ROOT, timeout=20, check=True)
+        assert sql("verbulio_restore", inspection) == after
+    print("Account deletion and two idempotent replays on a restored PostgreSQL snapshot passed.")
+
+
 def stop(server):
     server.terminate()
     server.wait(timeout=10)
@@ -572,6 +640,11 @@ basicConstraints = critical,CA:TRUE
         }
         dll = ROOT / "Verbulio.Api/bin/Release/net10.0/Verbulio.Api.dll"
         command = [dotnet, str(dll)]
+        deletion_container = os.environ.get("VERBULIO_POSTGRES_CONTAINER")
+        if deletion_container:
+            assert env.get("ConnectionStrings__AccountDeletionJournal")
+            subprocess.run(["docker", "exec", deletion_container, "createdb", "-U", "postgres",
+                            "verbulio_deletions"], check=True, timeout=15)
         subprocess.run([*command, "--migrate"], env=env, cwd=ROOT, check=True)
         with open(Path(directory) / "api.log", "w+", encoding="utf-8") as log:
             server = subprocess.Popen(command, env=env, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
@@ -648,6 +721,16 @@ basicConstraints = critical,CA:TRUE
                 server = subprocess.Popen(command, env=env, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
                 wait_ready(server, base, tls)
                 finish_account_session(owner, login, account, other, other_email, other_account)
+
+                if deletion_container and not os.environ.get("VERBULIO_PREVIOUS_API_DLL"):
+                    stop(server)
+                    server = subprocess.Popen(command, env=env, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+                    wait_ready(server, base, tls)
+                    exercise_account_deletion(command, env, deletion_container, owner, other, anonymous, login,
+                                              account, other_account, placement[0])
+                    assert "Account deletion journal unavailable" in (Path(directory) / "api.log").read_text(
+                        encoding="utf-8"
+                    )
 
                 if previous_api := os.environ.get("VERBULIO_PREVIOUS_API_DLL"):
                     stop(server)
