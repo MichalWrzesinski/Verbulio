@@ -13,13 +13,12 @@ import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { clearAccountLearningStorage } from './account-learning-storage';
 
-interface Account {
-  id: string;
-  startingLevel: string;
-}
-
-const endpoint = '/api/v1/local-account';
-const options = { headers: { 'X-Verbulio-Client': 'local-learning' }, timeout: 10_000 };
+import {
+  Account,
+  AccountSessionClient,
+  accountEndpoint as endpoint,
+  accountRequestOptions as options,
+} from './account-session-client';
 
 @Component({
   selector: 'app-local-login',
@@ -29,6 +28,7 @@ const options = { headers: { 'X-Verbulio-Client': 'local-learning' }, timeout: 1
 })
 export class LocalLogin {
   private readonly http = inject(HttpClient);
+  private readonly sessions = inject(AccountSessionClient);
   private readonly injector = inject(Injector);
   private readonly destroyRef = inject(DestroyRef);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
@@ -79,7 +79,7 @@ export class LocalLogin {
         this.error.set('Za dużo prób logowania. Spróbuj ponownie za chwilę.');
       } else {
         try {
-          const account = await this.readSession();
+          const account = await this.sessions.read();
           if (account) {
             form.reset();
             this.account.set(account);
@@ -110,36 +110,21 @@ export class LocalLogin {
     this.error.set('');
     this.notice.set('');
     try {
-      await firstValueFrom(this.http.post(`${endpoint}/logout`, null, options));
-      this.signedOut();
+      const remaining = await this.sessions.logout();
+      if (this.destroyRef.destroyed) return;
+      this.account.set(remaining);
+      this.focusHeading();
+      if (remaining) this.error.set('Sesja nadal trwa. Spróbuj wylogować się ponownie.');
     } catch {
-      try {
-        const account = await this.readSession();
-        if (account) {
-          this.account.set(account);
-          this.focusHeading();
-        } else {
-          this.signedOut();
-        }
-      } catch {
-        this.error.set('Nie udało się potwierdzić wylogowania.');
-      }
-      if (this.account() && !this.error())
-        this.error.set('Sesja nadal trwa. Spróbuj wylogować się ponownie.');
+      this.error.set('Nie udało się potwierdzić wylogowania.');
     } finally {
       this.busy.set(false);
     }
   }
 
-  private signedOut(): void {
-    clearAccountLearningStorage();
-    this.account.set(null);
-    this.focusHeading();
-  }
-
   private async restore(): Promise<void> {
     try {
-      const account = await this.readSession();
+      const account = await this.sessions.read();
       if (!account) clearAccountLearningStorage();
       this.account.set(account);
     } catch {
@@ -147,15 +132,6 @@ export class LocalLogin {
     } finally {
       this.loading.set(false);
       this.focusHeading();
-    }
-  }
-
-  private async readSession(): Promise<Account | null> {
-    try {
-      return await firstValueFrom(this.http.get<Account>(`${endpoint}/session`, options));
-    } catch (error) {
-      if (error instanceof HttpErrorResponse && error.status === 401) return null;
-      throw error;
     }
   }
 
