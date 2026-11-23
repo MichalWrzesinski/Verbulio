@@ -521,6 +521,14 @@ def exercise_account_export(command, env, directory, account, email, other_accou
     missing = Path(directory) / "missing-account-export.json"
     assert export(str(uuid.uuid4()), missing).returncode == 3
     assert not missing.exists()
+    competing_target = Path(directory) / "wspólny-eksport.json"
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(export, account["id"], competing_target)
+        second = pool.submit(export, other_account["id"], competing_target)
+        outcomes = [first.result().returncode, second.result().returncode]
+    assert sorted(outcomes) == [0, 1]
+    expected_email = email if outcomes[0] == 0 else other_email
+    assert json.loads(competing_target.read_bytes())["account"]["email"] == expected_email
     assert not list(Path(directory).glob(".verbulio-export-*.tmp"))
 
 

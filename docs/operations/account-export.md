@@ -2,7 +2,7 @@
 
 This command creates a readable JSON copy for an operator handling a verified account request. First verify the requester's identity with the approved account-support procedure and establish the internal account UUID. A claimed email address or a UUID supplied by the requester is insufficient verification. Run the command only against the authorized environment using the operator's database connection in `ConnectionStrings__Learning`. Never place credentials on the command line.
 
-From the directory containing the published API, use an absolute path in a private directory on Linux or macOS.
+From the directory containing the published API, use an absolute path in a private directory on Linux or macOS. The destination filesystem must support hard links.
 
 ```sh
 dotnet Verbulio.Api.dll --export-account <account-uuid> /private/operator-directory/verbulio-export.json

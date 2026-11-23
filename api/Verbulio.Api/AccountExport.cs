@@ -1,4 +1,6 @@
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using System.Text;
 using System.Text.Json;
 using Npgsql;
 
@@ -57,7 +59,8 @@ internal static class AccountExport
     [UnsupportedOSPlatform("windows")]
     private static async Task WritePrivateFileAsync(string destination, JsonElement document)
     {
-        var directory = Path.GetDirectoryName(Path.GetFullPath(destination))!;
+        destination = Path.GetFullPath(destination);
+        var directory = Path.GetDirectoryName(destination)!;
         var staging = Path.Combine(directory, $".verbulio-export-{Guid.NewGuid():N}.tmp");
         var streamOptions = new FileStreamOptions
         {
@@ -74,13 +77,20 @@ internal static class AccountExport
             {
                 await JsonSerializer.SerializeAsync(stream, document, ExportFormat);
             }
-            File.Move(staging, destination, overwrite: false);
+            if (Link(Encoding.UTF8.GetBytes(staging + "\0"), Encoding.UTF8.GetBytes(destination + "\0")) != 0)
+            {
+                throw new IOException("Unable to publish the export as a new file.");
+            }
         }
         finally
         {
             File.Delete(staging);
         }
     }
+
+    // POSIX link creates the final name atomically and fails if that name already exists.
+    [DllImport("libc", EntryPoint = "link")]
+    private static extern int Link(byte[] source, byte[] destination);
 
     private const string ExportQuery = """
         SELECT jsonb_build_object(
