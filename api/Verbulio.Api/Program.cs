@@ -27,7 +27,7 @@ var connectionString = builder.Configuration.GetConnectionString("Learning")
 builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<SessionStore>();
-builder.Services.AddSingleton<LearningPreferencesStore>();
+builder.Services.AddSingleton<AccountSettingsStore>();
 builder.Services.AddSingleton<GuestPlacementStore>();
 builder.Services.AddSingleton<RegistrationStore>();
 builder.Services.AddSingleton<AccountCredentials>();
@@ -195,14 +195,20 @@ var accountOnly = new AuthorizeAttribute { AuthenticationSchemes = accountScheme
 account.MapGet("/profile", async (HttpContext http, ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
     Results.Ok(await store.ProfileProgressAsync(Owner(user), StartingLevel(user), BrowserTimeZone(http), cancellationToken)))
     .RequireAuthorization(accountOnly);
-account.MapGet("/settings/learning", async (ClaimsPrincipal user, LearningPreferencesStore store,
+account.MapGet("/settings/account", async (ClaimsPrincipal user, AccountSettingsStore store,
+    CancellationToken cancellationToken) =>
+    await store.ReadContactAsync(Owner(user), cancellationToken) is { } contact
+        ? Results.Ok(contact)
+        : Results.Unauthorized())
+    .RequireAuthorization(accountOnly);
+account.MapGet("/settings/learning", async (ClaimsPrincipal user, AccountSettingsStore store,
     CancellationToken cancellationToken) =>
     await store.ReadAsync(Owner(user), cancellationToken) is { } preferences
         ? Results.Ok(preferences)
         : Results.Unauthorized())
     .RequireAuthorization(accountOnly);
 account.MapPut("/settings/learning", async (LearningPreferencesUpdate update, ClaimsPrincipal user,
-    LearningPreferencesStore store, CancellationToken cancellationToken) =>
+    AccountSettingsStore store, CancellationToken cancellationToken) =>
 {
     if (update.AutoAdvance is not { } enabled)
     {

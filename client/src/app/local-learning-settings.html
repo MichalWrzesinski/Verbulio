@@ -33,8 +33,8 @@
                 aria-labelledby="advance-label"
                 [attr.aria-describedby]="error() ? 'advance-note advance-error' : 'advance-note'"
                 [checked]="enabled()"
-                [attr.aria-disabled]="pending() || !!error()"
-                (click)="(pending() || error()) && $event.preventDefault()"
+                [attr.aria-disabled]="pending() || signingOut() || !!error()"
+                (click)="(pending() || signingOut() || error()) && $event.preventDefault()"
                 (change)="save(switchControl)"
               />
               <span class="sw-track" aria-hidden="true">
@@ -72,6 +72,35 @@
             </button>
           } @else if (saved()) {
             <p class="small" role="status">Ustawienie zapisane.</p>
+          }
+        </section>
+        <section class="set-sec" aria-labelledby="account-contact">
+          <h2 id="account-contact">Twoje dane</h2>
+          @if (email(); as address) {
+            <p class="kv">
+              <span>E-mail:&nbsp;</span><strong>{{ address }}</strong>
+            </p>
+          } @else if (contactError()) {
+            <p role="alert">Nie udało się wczytać adresu e-mail.</p>
+            <button type="button" class="key btn btn--secondary" (click)="loadContact()">
+              Spróbuj ponownie
+            </button>
+          } @else {
+            <p class="small" role="status">Wczytuję dane konta…</p>
+          }
+        </section>
+        <section class="set-sec" aria-labelledby="account-actions">
+          <h2 id="account-actions">Konto</h2>
+          <button
+            type="button"
+            class="key btn btn--secondary"
+            [disabled]="signingOut()"
+            (click)="logout()"
+          >
+            {{ signingOut() ? 'Wylogowuję…' : 'Wyloguj się' }}
+          </button>
+          @if (logoutError()) {
+            <p class="fb fb--bad" role="alert">{{ logoutError() }}</p>
           }
         </section>
       </div>
