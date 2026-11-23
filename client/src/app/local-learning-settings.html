@@ -78,7 +78,7 @@
           <h2 id="account-contact">Twoje dane</h2>
           @if (email(); as address) {
             <p class="kv">
-              <span>E-mail</span> <strong>{{ address }}</strong>
+              <span>E-mail:&nbsp;</span><strong>{{ address }}</strong>
             </p>
           } @else if (contactError()) {
             <p role="alert">Nie udało się wczytać adresu e-mail.</p>
