@@ -10,7 +10,7 @@
         aria-label="Przerwij sesję"
         aria-haspopup="dialog"
         [disabled]="busy()"
-        (click)="exitDialog.showModal()"
+        (click)="openExit(exitDialog)"
       >
         <svg class="i" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
           <path
