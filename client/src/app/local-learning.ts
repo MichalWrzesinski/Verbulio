@@ -79,6 +79,7 @@ const clientHeaders = { 'X-Verbulio-Client': 'local-learning' };
   imports: [RouterLink],
   templateUrl: './local-learning.html',
   styleUrl: './local-learning.css',
+  host: { '(document:visibilitychange)': 'pauseWhenHidden()' },
 })
 export class LocalLearning {
   private readonly http = inject(HttpClient);
@@ -253,7 +254,7 @@ export class LocalLearning {
   }
 
   protected retry(): void {
-    if (this.pendingAttempt) this.submit(this.pendingAttempt);
+    if (this.pendingAttempt) this.submit(this.pendingAttempt, { retry: true });
   }
 
   protected advance(): void {
@@ -267,6 +268,10 @@ export class LocalLearning {
     this.typed.set('');
     this.selected.set(null);
     this.focusMain();
+  }
+
+  protected pauseWhenHidden(): void {
+    if (document.hidden) this.cancelAdvance();
   }
 
   protected openExit(dialog: HTMLDialogElement): void {
@@ -305,7 +310,7 @@ export class LocalLearning {
     this.focusMain();
   }
 
-  private submit(attempt: Attempt): void {
+  private submit(attempt: Attempt, { retry } = { retry: false }): void {
     const session = this.session();
     if (!session) return;
 
@@ -332,6 +337,8 @@ export class LocalLearning {
         sessionStorage.setItem(this.feedbackCheckpointKey, JSON.stringify(checkpoint));
         this.showFeedback(checkpoint);
         if (
+          !retry &&
+          !document.hidden &&
           this.autoAdvance &&
           response.feedback.assessment.grade === 'Correct' &&
           response.session.question

@@ -31,7 +31,7 @@
                 type="checkbox"
                 role="switch"
                 aria-labelledby="advance-label"
-                aria-describedby="advance-note"
+                [attr.aria-describedby]="error() ? 'advance-note advance-error' : 'advance-note'"
                 [checked]="enabled()"
                 [attr.aria-disabled]="pending() || !!error()"
                 (click)="(pending() || error()) && $event.preventDefault()"
@@ -66,7 +66,7 @@
               {{ enabled() === null ? 'Wczytuję ustawienie…' : 'Zapisuję…' }}
             </p>
           } @else if (error()) {
-            <p class="fb fb--bad" role="alert">{{ error() }}</p>
+            <p class="fb fb--bad" id="advance-error" role="alert">{{ error() }}</p>
             <button type="button" class="key btn btn--secondary" (click)="load()">
               Odśwież ustawienie
             </button>
