@@ -127,7 +127,7 @@
                 class="link link--danger set-danger"
                 aria-haspopup="dialog"
                 [disabled]="signingOut() || deleting()"
-                (click)="deleteDialog.showModal()"
+                (click)="openDeleteDialog(deleteDialog, deletePassword)"
               >
                 Usuń konto
               </button>
@@ -147,7 +147,7 @@
     aria-labelledby="delete-title"
     aria-describedby="delete-description"
     (cancel)="guardDeleteDialogCancel($event)"
-    (close)="resetDeleteDialog(deletePassword)"
+    (close)="!deleteDialog.open && resetDeleteDialog(deletePassword)"
   >
     <h2 id="delete-title">Usunąć konto?</h2>
     <p id="delete-description">

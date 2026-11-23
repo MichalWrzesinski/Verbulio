@@ -168,6 +168,11 @@ export class LocalLearningSettings {
     }
   }
 
+  protected openDeleteDialog(dialog: HTMLDialogElement, password: HTMLInputElement): void {
+    this.resetDeleteDialog(password);
+    dialog.showModal();
+  }
+
   protected guardDeleteDialogCancel(event: Event): void {
     if (this.deleting()) event.preventDefault();
   }
