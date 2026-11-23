@@ -5,20 +5,53 @@ import {
   DestroyRef,
   ElementRef,
   inject,
+  Injector,
   signal,
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { firstValueFrom } from 'rxjs';
 import { Router, RouterLink } from '@angular/router';
 import { clearAccountLearningStorage } from './account-learning-storage';
-import { AccountSessionClient, accountEndpoint } from './account-session-client';
+import {
+  AccountSessionClient,
+  accountEndpoint,
+  accountRequestOptions,
+} from './account-session-client';
 import { LearningPreferences } from './learning-preferences';
 
 @Component({
   selector: 'app-local-learning-settings',
   imports: [RouterLink],
   templateUrl: './local-learning-settings.html',
-  styles: ':host { display: contents; }',
+  styles: `
+    :host {
+      display: contents;
+    }
+    dialog.dialog:not([open]) {
+      display: none;
+    }
+    dialog.dialog[open] {
+      margin: auto;
+      width: calc(100% - 32px);
+      max-height: calc(100dvh - 32px);
+      overflow: auto;
+    }
+    @media (max-width: 639px) {
+      dialog.dialog[open] {
+        margin-bottom: 16px;
+      }
+    }
+    button.set-danger {
+      align-self: flex-start;
+    }
+    #delete-error {
+      color: var(--color-ink);
+    }
+    dialog::backdrop {
+      background: var(--backdrop);
+    }
+  `,
 })
 export class LocalLearningSettings {
   private readonly http = inject(HttpClient);
@@ -26,6 +59,7 @@ export class LocalLearningSettings {
   private readonly router = inject(Router);
   private readonly preferences = inject(LearningPreferences);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
   private readonly heading = viewChild.required<ElementRef<HTMLElement>>('heading');
 
   protected readonly enabled = signal<boolean | null>(null);
@@ -37,6 +71,12 @@ export class LocalLearningSettings {
   protected readonly contactError = signal(false);
   protected readonly signingOut = signal(false);
   protected readonly logoutError = signal('');
+  protected readonly deletionAvailable = signal(false);
+  protected readonly deleting = signal(false);
+  protected readonly deleted = signal(false);
+  protected readonly deletionUnconfirmed = signal(false);
+  protected readonly deleteError = signal('');
+  protected readonly wrongPassword = signal(false);
 
   constructor() {
     afterNextRender(() => this.heading().nativeElement.focus());
@@ -86,12 +126,18 @@ export class LocalLearningSettings {
 
   protected loadContact(): void {
     this.email.set(null);
+    this.deletionAvailable.set(false);
     this.contactError.set(false);
     this.http
-      .get<{ email: string }>(`${accountEndpoint}/settings/account`, { timeout: 10_000 })
+      .get<{ email: string; deletionAvailable: boolean }>(`${accountEndpoint}/settings/account`, {
+        timeout: 10_000,
+      })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: ({ email }) => this.email.set(email),
+        next: ({ email, deletionAvailable }) => {
+          this.email.set(email);
+          this.deletionAvailable.set(deletionAvailable === true);
+        },
         error: (error: unknown) => {
           if (!this.showSignIn(error)) this.contactError.set(true);
         },
@@ -99,7 +145,7 @@ export class LocalLearningSettings {
   }
 
   protected async logout(): Promise<void> {
-    if (this.signingOut()) return;
+    if (this.signingOut() || this.deleting()) return;
     this.signingOut.set(true);
     this.logoutError.set('');
     try {
@@ -122,12 +168,80 @@ export class LocalLearningSettings {
     }
   }
 
+  protected resetDeleteDialog(password: HTMLInputElement): void {
+    password.value = '';
+    this.deleteError.set('');
+    this.wrongPassword.set(false);
+  }
+
+  protected async confirmDeletion(
+    event: SubmitEvent,
+    dialog: HTMLDialogElement,
+    password: HTMLInputElement,
+  ): Promise<void> {
+    event.preventDefault();
+    if (this.deleting() || this.signingOut() || !this.deletionAvailable() || !password.value)
+      return;
+
+    const value = password.value;
+    this.resetDeleteDialog(password);
+    this.deleting.set(true);
+    try {
+      const response = await firstValueFrom(
+        this.http.post(
+          `${accountEndpoint}/delete`,
+          { password: value },
+          {
+            ...accountRequestOptions,
+            observe: 'response',
+          },
+        ),
+      );
+      if (response.status !== 204) throw new Error('Unconfirmed deletion');
+      if (this.destroyRef.destroyed) return;
+      clearAccountLearningStorage();
+      this.email.set(null);
+      this.enabled.set(null);
+      dialog.close();
+      this.deleted.set(true);
+      this.focusHeading();
+    } catch (error) {
+      if (this.destroyRef.destroyed) return;
+      if (this.showSignIn(error)) {
+        this.deletionUnconfirmed.set(true);
+        dialog.close();
+        this.focusHeading();
+      } else if (
+        error instanceof HttpErrorResponse &&
+        error.status === 403 &&
+        error.error?.code === 'invalid_account_password'
+      ) {
+        this.wrongPassword.set(true);
+        this.deleteError.set('Nieprawidłowe hasło.');
+      } else if (error instanceof HttpErrorResponse && error.status === 429) {
+        this.deleteError.set('Za dużo prób. Spróbuj ponownie za chwilę.');
+      } else if (error instanceof HttpErrorResponse && error.status === 503) {
+        this.deleteError.set('Usunięcie konta jest chwilowo niedostępne.');
+      } else {
+        this.deleteError.set('Nie udało się potwierdzić usunięcia konta.');
+      }
+    } finally {
+      this.deleting.set(false);
+      if (dialog.open && !this.destroyRef.destroyed) password.focus();
+    }
+  }
+
+  private focusHeading(): void {
+    afterNextRender(() => this.heading().nativeElement.focus(), { injector: this.injector });
+  }
+
   private showSignIn(error: unknown): boolean {
     if (!(error instanceof HttpErrorResponse) || error.status !== 401) return false;
 
     clearAccountLearningStorage();
     this.email.set(null);
     this.enabled.set(null);
+    this.deletionAvailable.set(false);
     this.signInRequired.set(true);
     return true;
   }
