@@ -13,6 +13,12 @@ using Verbulio.Api;
 using Verbulio.Learning;
 using Verbulio.Learning.Placement;
 
+if (args.Length > 0 && args[0] == "--export-account")
+{
+    Environment.ExitCode = await AccountExport.RunAsync(args);
+    return;
+}
+
 const string accountScheme = "LocalAccount";
 const string loginLimit = "LocalAccountLogin";
 var builder = WebApplication.CreateBuilder(args);

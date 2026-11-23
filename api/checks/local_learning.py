@@ -466,6 +466,64 @@ def exercise_account_learning(owner, other, anonymous, login, account, other_ema
     assert other.request(profile_path)["streak"] == no_streak
 
 
+def exercise_account_export(command, env, directory, account, email, other_account, other_email):
+    def export(account_id, target):
+        return subprocess.run([*command, "--export-account", account_id, str(target)],
+                              env=env, cwd=ROOT, capture_output=True, text=True, timeout=15)
+
+    target = Path(directory) / "account-export.json"
+    result = export(account["id"], target)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "Account export written.\n"
+    assert result.stderr == ""
+    assert target.stat().st_mode & 0o777 == 0o600
+    payload = target.read_bytes()
+    report = json.loads(payload)
+    assert set(report) == {"version", "account", "placement", "wordProgress", "learningSessions", "learningDays"}
+    assert report["version"] == 1
+    assert set(report["account"]) == {"email", "startingLevel", "createdAt", "emailConfirmedAt", "autoAdvance"}
+    assert report["account"]["email"] == email
+    assert report["account"]["startingLevel"] == "A1"
+    assert report["account"]["autoAdvance"] is False
+    assert len(report["placement"]["answers"]) == 20
+    assert set(report["placement"]["answers"][0]) == {"questionNumber", "text", "choice", "skipped"}
+    assert [item["questionNumber"] for item in report["placement"]["answers"]] == list(range(1, 21))
+    assert len(report["wordProgress"]) == 15
+    assert all(item["wordId"].startswith("a1-") for item in report["wordProgress"])
+    assert len(report["learningSessions"]) == 3
+    assert {item["category"] for item in report["learningSessions"]} == {None, "jedzenie"}
+    assert sorted(len(item["answers"]) for item in report["learningSessions"]) == [0, 5, 10]
+    for session in report["learningSessions"]:
+        assert set(session) == {"active", "dictionaryVersion", "category", "timeZone", "endedByRequest", "wordIds", "answers"}
+        assert all(set(item) == {"questionNumber", "text", "choice", "answeredAt"} for item in session["answers"])
+    assert len(report["learningDays"]) == 1
+    assert report["learningDays"][0]["timeZone"] == "Pacific/Kiritimati"
+    assert email not in result.stdout + result.stderr and other_email.encode() not in payload
+
+    second_target = Path(directory) / "second-account-export.json"
+    assert export(other_account["id"], second_target).returncode == 0
+    second = json.loads(second_target.read_bytes())
+    assert second["account"]["email"] == other_email
+    assert second["account"]["startingLevel"] == "C2"
+    assert len(second["wordProgress"]) == 1
+    assert second["wordProgress"][0]["wordId"].startswith("c2-")
+    assert second["learningDays"] == []
+
+    assert export(account["id"], target).returncode == 1
+    assert target.read_bytes() == payload
+    linked_target = Path(directory) / "linked-export.json"
+    linked_target.symlink_to(target)
+    assert export(account["id"], linked_target).returncode == 1
+    assert linked_target.is_symlink() and target.read_bytes() == payload
+    invalid_target = Path(directory) / "invalid-export.json"
+    assert export("invalid", invalid_target).returncode == 2
+    assert not invalid_target.exists()
+    missing = Path(directory) / "missing-account-export.json"
+    assert export(str(uuid.uuid4()), missing).returncode == 3
+    assert not missing.exists()
+    assert not list(Path(directory).glob(".verbulio-export-*.tmp"))
+
+
 def stop(server):
     server.terminate()
     server.wait(timeout=10)
@@ -551,6 +609,7 @@ basicConstraints = critical,CA:TRUE
                 email, account, other_email, other_account = exercise_registration(owner, other, anonymous, placement[0])
                 login = start_account_session(owner, other, anonymous, email, account)
                 exercise_account_learning(owner, other, anonymous, login, account, other_email, other_account)
+                exercise_account_export(command, env, directory, account, email, other_account, other_email)
                 assert owner.request(resource) == accepted["session"]
                 assert owner.request(resource + "/answers", 200, "POST", submission, key) == accepted
 
