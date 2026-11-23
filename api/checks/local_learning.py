@@ -545,6 +545,8 @@ def exercise_account_deletion(command, env, container, owner, other, anonymous, 
     placement_id = placement.rsplit("/", 1)[-1]
     subject = {"password": login["password"]}
     anonymous.request(endpoint, 401, "POST", subject)
+    # The earlier rotation race may leave its original browser with a stale cookie.
+    owner = Browser(owner.base, owner.tls)
     assert owner.request(ACCOUNT + "/login", 200, "POST", login) == account
     second = Browser(owner.base, owner.tls)
     assert second.request(ACCOUNT + "/login", 200, "POST", login) == account
