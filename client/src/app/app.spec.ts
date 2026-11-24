@@ -114,6 +114,25 @@ describe('Public navigation', () => {
     expect(harness.routeNativeElement?.querySelector('a[href="/logowanie"]')).toBeTruthy();
   });
 
+  it('replaces a pending confirmation when a second link opens on the same route', async () => {
+    const original = 'a'.repeat(43);
+    const replacement = 'b'.repeat(43);
+    const harness = await RouterTestingHarness.create('/potwierdz-adres#token=' + original);
+    const requests = TestBed.inject(HttpTestingController);
+    const endpoint = '/api/v1/local-account/email-confirmation/confirm';
+    harness.routeNativeElement?.querySelector('button')?.click();
+    const active = requests.expectOne(endpoint);
+
+    await harness.navigateByUrl('/potwierdz-adres#token=' + replacement);
+    expect(active.cancelled).toBe(true);
+    expect(TestBed.inject(Location).path(true)).toBe('/potwierdz-adres');
+    requests.expectNone(endpoint);
+    harness.routeNativeElement?.querySelector('button')?.click();
+    const confirmation = requests.expectOne(endpoint);
+    expect(confirmation.request.body).toEqual({ token: replacement });
+    confirmation.flush(null, { status: 204, statusText: 'No Content' });
+  });
+
   it('reports an invalid confirmation link without a success state', async () => {
     const harness = await RouterTestingHarness.create('/potwierdz-adres#token=' + 'a'.repeat(43));
     harness.routeNativeElement?.querySelector('button')?.click();

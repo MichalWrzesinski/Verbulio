@@ -12,6 +12,6 @@ The learning slice uses .NET SDK 10.0.404, Npgsql and PostgreSQL 18 for local de
 
 ## Staging and email
 
-The owner provides an existing VPS at `151.240.121.172`. The expected installation directory is `/srv/Verbulio` and it currently serves a placeholder. The path, existing TLS configuration, and deploy access remain to be verified on the host. Plan a reversible cutover preserving the placeholder until the staging release is verified. Record environment details in the deployment configuration when preparing the staging release.
+The owner provides an existing VPS at `151.240.121.172`. The withdrawn placeholder used `/srv/Verbulio`. See [public VPS cutover](tasks/TASK-029-public-vps-cutover.md) for the current host observations and release prerequisites. The [private preview](operations/private-preview.md) is deployed separately through GitHub Actions.
 
 Use Brevo for transactional mail when the account workflow needs delivery. The owner confirmed that the sender `verbulio@gitpush.app` is configured and was tested on the VPS. Local and CI checks use captured mail. The application-specific Brevo credentials, integration and delivery test are still pending. Deployment may proceed when staging is needed for verification within the approved infrastructure scope.

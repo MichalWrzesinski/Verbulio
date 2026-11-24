@@ -12,6 +12,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { skip, takeUntil } from 'rxjs';
 import { accountEndpoint, accountRequestOptions } from './account-session-client';
 
 @Component({
@@ -81,7 +82,8 @@ export class LocalEmailConfirmation {
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
   private readonly heading = viewChild.required<ElementRef<HTMLElement>>('heading');
-  private token: string | null;
+  private readonly route = inject(ActivatedRoute);
+  private token: string | null = null;
 
   protected readonly pending = signal(false);
   protected readonly confirmed = signal(false);
@@ -90,14 +92,22 @@ export class LocalEmailConfirmation {
 
   constructor() {
     const location = inject(Location);
-    const fragment = inject(ActivatedRoute).snapshot.fragment;
-    this.token = fragment?.match(/^token=([A-Za-z0-9_-]{43})$/)?.[1] ?? null;
-    this.hasToken.set(this.token !== null);
-    if (fragment !== null) {
-      // The router must finish its initial URL write before we strip the fragment.
-      afterNextRender(() => location.replaceState(location.path(), '', location.getState()));
-    }
-    afterNextRender(() => this.heading().nativeElement.focus());
+    this.route.fragment.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((fragment) => {
+      this.token = fragment?.match(/^token=([A-Za-z0-9_-]{43})$/)?.[1] ?? null;
+      this.hasToken.set(this.token !== null);
+      this.pending.set(false);
+      this.confirmed.set(false);
+      this.error.set('');
+      afterNextRender(
+        () => {
+          if (fragment !== null) {
+            location.replaceState(location.path(), '', location.getState());
+          }
+          this.heading().nativeElement.focus();
+        },
+        { injector: this.injector },
+      );
+    });
   }
 
   protected confirm(): void {
@@ -114,7 +124,7 @@ export class LocalEmailConfirmation {
           observe: 'response',
         },
       )
-      .pipe(takeUntilDestroyed(this.destroyRef))
+      .pipe(takeUntil(this.route.fragment.pipe(skip(1))), takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
           this.pending.set(false);
