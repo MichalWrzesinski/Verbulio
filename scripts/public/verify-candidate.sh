@@ -39,7 +39,9 @@ gh api "repos/$repo/actions/artifacts/$artifact_id/zip" > "$fixture/artifact.zip
 observed_artifact="$(sha256sum "$fixture/artifact.zip")"
 [[ "${observed_artifact%% *}" == "$artifact_digest" ]] || fail "Downloaded artifact digest does not match."
 unzip -p "$fixture/artifact.zip" verbulio-public.tar.gz > "$fixture/verbulio-public.tar.gz"
-[[ "$(tar -xOzf "$fixture/verbulio-public.tar.gz" ./REVISION)" == "$revision" ]] || fail "Archive revision does not match."
+gzip -t "$fixture/verbulio-public.tar.gz" || fail "Site archive is damaged."
+archive_revision="$(tar -xOzf "$fixture/verbulio-public.tar.gz" ./REVISION)" || fail "Cannot read the site archive revision."
+[[ "$archive_revision" == "$revision" ]] || fail "Archive revision does not match."
 archive_hash="$(sha256sum "$fixture/verbulio-public.tar.gz")"
 
 printf 'Revision: %s\nCI run: %s (attempt %s)\nArtifact ID: %s\nArtifact ZIP SHA-256: %s\nSite archive SHA-256: %s\nNginx ingress SHA-256: %s\n' \
