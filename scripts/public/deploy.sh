@@ -56,10 +56,12 @@ start() {
 }
 
 healthy() {
-  local expected_revision="${1:-}" headers attempt
+  local url="$1" expected_revision="$2" headers attempt
+  shift 2
   for attempt in {1..20}; do
     if headers="$(curl --noproxy '*' --fail --silent --max-time 3 --dump-header - \
-      --output /dev/null https://verbulio.gitpush.app/health)" &&
+      --output /dev/null "$url" "$@")" &&
+      grep -Eq '^HTTP/[^ ]+ 200[[:space:]]' <<< "$headers" &&
       { [[ -z "$expected_revision" ]] || printf '%s\n' "$headers" |
         tr -d '\r' | grep -iqx "X-Verbulio-Revision: $expected_revision"; }; then
       return 0
@@ -77,14 +79,28 @@ fi
 pointer="$(mktemp -d .promote.XXXXXX)"
 trap 'rm -rf -- "$pointer"' EXIT
 ln -s -- "$release" "$pointer/current-release"
-if start "$release" && healthy "$revision" && mv -T -- "$pointer/current-release" current-release; then
+if start "$release" && healthy https://verbulio.gitpush.app/health "$revision" && mv -T -- "$pointer/current-release" current-release; then
   printf 'Public release %s is healthy through public HTTPS.\n' "$revision"
   exit 0
 fi
 printf 'Public candidate failed verification or promotion.\n' >&2
-if [[ -n "$previous" ]] && start "$previous" && healthy; then
-  printf 'Restored the preceding public release.\n' >&2
-else
-  "${engine[@]}" rm -f "$container" >/dev/null 2>&1 || true
+if [[ -n "$previous" ]] && start "$previous"; then
+  previous_revision="${previous##*/}"
+  previous_revision="${previous_revision%%-*}"
+  # The first public release predates the revision response header.
+  if [[ "$previous_revision" == 006104217683613de617ecad481825860eb2d917 ]]; then
+    previous_revision=
+  fi
+  if healthy http://127.0.0.1:5444/health "$previous_revision" \
+    -H 'Host: verbulio.gitpush.app' -H 'X-Forwarded-For: 127.0.0.1' -H 'X-Forwarded-Proto: https'; then
+    printf 'Restored the preceding public release on loopback.\n' >&2
+    if healthy https://verbulio.gitpush.app/health "$previous_revision"; then
+      printf 'Public HTTPS also recovered.\n' >&2
+    else
+      printf 'Public HTTPS remains unavailable. The restored runtime is still running.\n' >&2
+    fi
+    exit 1
+  fi
 fi
+"${engine[@]}" rm -f "$container" >/dev/null 2>&1 || true
 exit 1
