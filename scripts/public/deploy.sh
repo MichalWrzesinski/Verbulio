@@ -37,10 +37,77 @@ test -f "$release/wwwroot/index.html"
 
 container=verbulio-public-site
 engine=(docker --host unix:///var/run/docker.sock)
+database=verbulio-staging-postgres
+database_image=postgres:18-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71
+
+site_environment() {
+  local selected="$1"
+  site_env=(-e ASPNETCORE_ENVIRONMENT=Public)
+  if [[ -f "$selected/RUNTIME" ]]; then
+    [[ "$(cat "$selected/RUNTIME")" == Staging && -f staging-app.env ]] || return 1
+    site_env=(--env-file "$root/staging-app.env" --mount "type=bind,source=$root/keys,target=/keys")
+  fi
+}
+
+prepare_staging() {
+  mkdir -p keys
+  if [[ ! -s staging-password ]]; then
+    openssl rand -hex 32 > staging-password.tmp
+    mv -T staging-password.tmp staging-password
+  fi
+  local password
+  password="$(cat staging-password)"
+  {
+    printf 'ASPNETCORE_ENVIRONMENT=Staging\nLearningKeyDirectory=/keys\n'
+    printf 'ConnectionStrings__StagingLearning=Host=127.0.0.1;Port=55448;Database=verbulio_staging;Username=verbulio_staging;Password=%s\n' "$password"
+    printf 'ConnectionStrings__StagingDeletionJournal=Host=127.0.0.1;Port=55448;Database=verbulio_staging_deletions;Username=verbulio_staging;Password=%s\n' "$password"
+  } > staging-app.env.tmp
+  mv -T staging-app.env.tmp staging-app.env
+  if ! "${engine[@]}" container inspect "$database" >/dev/null 2>&1; then
+    "${engine[@]}" run -d --name "$database" --restart unless-stopped --memory 192m \
+      -p 127.0.0.1:55448:5432 --mount type=volume,source=verbulio-staging-data,target=/var/lib/postgresql \
+      --mount "type=bind,source=$root/staging-password,target=/run/staging-password,readonly" \
+      -e POSTGRES_PASSWORD_FILE=/run/staging-password -e POSTGRES_USER=verbulio_staging \
+      -e POSTGRES_DB=verbulio_staging "$database_image" >/dev/null
+  else
+    "${engine[@]}" start "$database" >/dev/null
+  fi
+  local attempt
+  for attempt in {1..30}; do
+    if "${engine[@]}" exec "$database" pg_isready -h 127.0.0.1 -U verbulio_staging -d verbulio_staging >/dev/null; then
+      break
+    fi
+    sleep 1
+  done
+  "${engine[@]}" exec "$database" pg_isready -h 127.0.0.1 -U verbulio_staging -d verbulio_staging >/dev/null
+  if [[ "$("${engine[@]}" exec "$database" psql -U verbulio_staging -d postgres -At \
+      -c "SELECT 1 FROM pg_database WHERE datname = 'verbulio_staging_deletions'")" != 1 ]]; then
+    "${engine[@]}" exec "$database" createdb -U verbulio_staging verbulio_staging_deletions
+  fi
+  local backup
+  backup="$(mktemp .staging-backup.XXXXXX)"
+  if "${engine[@]}" exec "$database" pg_dump -U verbulio_staging -Fc verbulio_staging > "$backup"; then
+    mv -T "$backup" staging-before-deploy.dump
+  else
+    rm -f -- "$backup"
+    return 1
+  fi
+  site_environment "$release"
+  "${engine[@]}" run --rm --network host --user "$(id -u):$(id -g)" --read-only --tmpfs /tmp \
+    --cap-drop ALL --security-opt no-new-privileges --memory 192m \
+    --mount "type=bind,source=$release,target=/app,readonly" "${site_env[@]}" -w /app "$runtime_image" \
+    dotnet Verbulio.Api.dll --migrate
+}
+
+if [[ -f "$release/RUNTIME" ]]; then
+  [[ "$(cat "$release/RUNTIME")" == Staging ]]
+  prepare_staging
+fi
 
 start() {
   local selected="$1"
   local image
+  site_environment "$selected" || return 1
   image="$(cat "$selected/runtime-image")" || return 1
   [[ "$image" =~ ^mcr\.microsoft\.com/dotnet/aspnet:10\.0@sha256:[0-9a-f]{64}$ ]] || return 1
   if ! "${engine[@]}" image inspect "$image" >/dev/null 2>&1; then
@@ -51,7 +118,7 @@ start() {
     --user "$(id -u):$(id -g)" --read-only --tmpfs /tmp --cap-drop ALL \
     --security-opt no-new-privileges --memory 256m \
     --mount "type=bind,source=$selected,target=/app,readonly" \
-    -e ASPNETCORE_ENVIRONMENT=Public -w /app --pull never "$image" \
+    "${site_env[@]}" -w /app --pull never "$image" \
     dotnet Verbulio.Api.dll >/dev/null
 }
 

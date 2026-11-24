@@ -9,7 +9,7 @@ fi
 archive="$1"
 case "${2:-preview}" in
   preview) configuration=production,preview ;;
-  public) configuration=production ;;
+  public) configuration=production,preview ;;
   *) exit 2 ;;
 esac
 if [[ -e "$archive" ]]; then
@@ -36,5 +36,8 @@ trap 'rm -rf -- "$package"' EXIT
 mkdir -p "$package/app/wwwroot"
 cp -R "$package/client/browser/." "$package/app/wwwroot/"
 git -C "$repo" rev-parse HEAD > "$package/app/REVISION"
+if [[ "${2:-preview}" == public ]]; then
+  printf 'Staging\n' > "$package/app/RUNTIME"
+fi
 tar -czf "$package/site.tar.gz" -C "$package/app" .
 cp "$package/site.tar.gz" "$archive"
