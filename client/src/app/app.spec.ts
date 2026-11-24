@@ -54,6 +54,43 @@ describe('Public navigation', () => {
     expect(test?.querySelector('.result')).toBeNull();
   });
 
+  it('links from account settings to data-copy information', async () => {
+    const harness = await RouterTestingHarness.create('/ustawienia');
+    const requests = TestBed.inject(HttpTestingController);
+    requests.expectOne('/api/v1/local-account/settings/account').flush({
+      email: 'fixture@example.invalid',
+      deletionAvailable: false,
+    });
+    requests.expectOne('/api/v1/local-account/settings/learning').flush({ autoAdvance: true });
+    harness.detectChanges();
+
+    const link = harness.routeNativeElement?.querySelector<HTMLAnchorElement>(
+      'a[href="/prywatnosc/eksport"]',
+    );
+    expect(link?.textContent?.trim()).toBe('Jak dostać kopię swoich danych');
+
+    const page = await harness.navigateByUrl('/prywatnosc/eksport');
+    expect(page).toBeTruthy();
+    expect(harness.routeNativeElement?.querySelector('h1')?.textContent).toBe(
+      'Kopia Twoich danych',
+    );
+    expect(harness.routeNativeElement?.textContent).toContain('wniosków o kopię danych');
+  });
+
+  it('hides the data-copy link when sign-in is required', async () => {
+    const harness = await RouterTestingHarness.create('/ustawienia');
+    const requests = TestBed.inject(HttpTestingController);
+    for (const resource of ['account', 'learning']) {
+      requests
+        .expectOne('/api/v1/local-account/settings/' + resource)
+        .flush(null, { status: 401, statusText: 'Unauthorized' });
+    }
+    harness.detectChanges();
+
+    expect(harness.routeNativeElement?.querySelector('a[href="/logowanie"]')).toBeTruthy();
+    expect(harness.routeNativeElement?.querySelector('a[href="/prywatnosc/eksport"]')).toBeNull();
+  });
+
   it('keeps credential fields off the HTTP development login page', async () => {
     const harness = await RouterTestingHarness.create('/logowanie');
     const page = harness.routeNativeElement;
