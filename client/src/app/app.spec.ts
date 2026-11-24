@@ -177,6 +177,16 @@ describe('Public navigation', () => {
     );
   });
 
+  it('clears a reset link without showing credential fields on HTTP', async () => {
+    const harness = await RouterTestingHarness.create('/nowe-haslo#token=' + 'a'.repeat(43));
+    await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/nowe-haslo'));
+    expect(harness.routeNativeElement?.textContent).toContain('przez HTTPS');
+    expect(harness.routeNativeElement?.querySelector('form')).toBeNull();
+    TestBed.inject(HttpTestingController).expectNone(
+      '/api/v1/local-account/password-reset/complete',
+    );
+  });
+
   it('keeps credential fields off the HTTP development login page', async () => {
     const harness = await RouterTestingHarness.create('/logowanie');
     const page = harness.routeNativeElement;

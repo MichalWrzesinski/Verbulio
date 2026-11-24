@@ -46,6 +46,12 @@ export const learningRoutes: Routes = [
       import('./local-email-confirmation').then((module) => module.LocalEmailConfirmation),
   },
   {
+    path: 'nowe-haslo',
+    title: 'Ustaw nowe hasło · Verbulio',
+    loadComponent: () =>
+      import('./local-password-reset').then((module) => module.LocalPasswordReset),
+  },
+  {
     path: 'lokalna-nauka',
     title: 'Sesja nauki · Verbulio',
     loadComponent: () => import('./local-learning').then((module) => module.LocalLearning),
