@@ -23,6 +23,12 @@ const string accountScheme = "LocalAccount";
 const string loginLimit = "LocalAccountLogin";
 const string confirmationLimit = "LocalEmailConfirmation";
 var builder = WebApplication.CreateBuilder(args);
+if (builder.Environment.IsEnvironment("Public"))
+{
+    await PublicSite.RunAsync(builder);
+    return;
+}
+
 var preview = builder.Environment.IsEnvironment("Preview");
 if (!builder.Environment.IsDevelopment() && !preview)
 {

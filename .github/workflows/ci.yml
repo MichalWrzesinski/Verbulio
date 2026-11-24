@@ -78,6 +78,7 @@ jobs:
         env:
           VERBULIO_CONFIRMATION_TEST_DB: ${{ env.ConnectionStrings__Learning }}
       - run: dotnet build Verbulio.Api -c Release --no-restore
+      - run: python3 checks/public_site.py
       - run: python3 checks/local_learning.py
         env:
           VERBULIO_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
