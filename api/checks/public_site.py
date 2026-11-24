@@ -13,18 +13,26 @@ HOST = "verbulio.gitpush.app"
 FORWARDED = {"Host": HOST, "X-Forwarded-For": "192.0.2.10", "X-Forwarded-Proto": "https"}
 
 
-def request(path, headers=FORWARDED, method="GET"):
+def request(path, headers=FORWARDED, method="GET", include_headers=False):
     connection = http.client.HTTPConnection("127.0.0.1", 5444, timeout=2)
     try:
         connection.request(method, path, headers=headers)
         response = connection.getresponse()
-        return response.status, response.read()
+        payload = response.read()
+        if include_headers:
+            return response.status, payload, {key.lower(): value for key, value in response.getheaders()}
+        return response.status, payload
     finally:
         connection.close()
 
 
 def verify():
-    assert request("/") == (200, b"<h1>Public Verbulio fixture</h1>")
+    status, payload, headers = request("/", include_headers=True)
+    assert (status, payload) == (200, b"<h1>Public Verbulio fixture</h1>")
+    assert headers["strict-transport-security"] == "max-age=31536000"
+    assert "frame-ancestors 'none'" in headers["content-security-policy"]
+    assert headers["x-content-type-options"] == "nosniff"
+    assert headers["referrer-policy"] == "no-referrer"
     assert request("/test") == request("/")
     assert request("/app.css") == (200, b"body {}")
     assert request("/missing.js")[0] == 404

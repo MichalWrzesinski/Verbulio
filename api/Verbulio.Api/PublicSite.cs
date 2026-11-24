@@ -30,6 +30,11 @@ internal static class PublicSite
                 return;
             }
 
+            var headers = context.Response.Headers;
+            headers.StrictTransportSecurity = "max-age=31536000";
+            headers.ContentSecurityPolicy = "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'";
+            headers.XContentTypeOptions = "nosniff";
+            headers["Referrer-Policy"] = "no-referrer";
             await next(context);
         });
 
