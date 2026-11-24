@@ -40,9 +40,10 @@ public sealed class EmailConfirmationTests
             Assert.NotEqual(original, replacement);
             Assert.False(await store.ConfirmAsync(original, default));
 
-            clock.Now += EmailConfirmationStore.Lifetime;
+            clock.Now += TimeSpan.FromHours(24) - TimeSpan.FromSeconds(1);
+            Assert.True(await store.ConfirmAsync(peerToken, default));
+            clock.Now += TimeSpan.FromSeconds(1);
             Assert.False(await store.ConfirmAsync(replacement, default));
-            Assert.False(await store.ConfirmAsync(peerToken, default));
 
             var current = Assert.IsType<string>(await store.IssueAsync(owner, default));
             var confirmations = await Task.WhenAll(store.ConfirmAsync(current, default),
@@ -61,7 +62,7 @@ public sealed class EmailConfirmationTests
             Assert.Equal(clock.Now.UtcDateTime, row.GetDateTime(0));
             Assert.True(row.IsDBNull(1));
             Assert.True(row.IsDBNull(2));
-            Assert.NotNull(await store.IssueAsync(peer, default));
+            Assert.Null(await store.IssueAsync(peer, default));
         }
         finally
         {
