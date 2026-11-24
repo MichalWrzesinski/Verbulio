@@ -34,9 +34,10 @@ public sealed class EmailConfirmationTests
             Assert.Null(await store.IssueAsync(Guid.NewGuid(), default));
             Assert.False(await store.ConfirmAsync("invalid", default));
 
-            var original = Assert.IsType<string>(await store.IssueAsync(owner, default));
-            var replacement = Assert.IsType<string>(await store.IssueAsync(owner, default));
-            var peerToken = Assert.IsType<string>(await store.IssueAsync(peer, default));
+            var original = Assert.IsType<EmailConfirmationIssue>(await store.IssueAsync(owner, default)).Token;
+            var replacement = Assert.IsType<EmailConfirmationIssue>(await store.IssueAsync(owner, default)).Token;
+            var peerToken = Assert.IsType<EmailConfirmationIssue>(await store.IssueAsync(peer, default)).Token;
+            Assert.Null(await store.IssueAsync(owner, default, TimeSpan.FromMinutes(1)));
             Assert.NotEqual(original, replacement);
             Assert.False(await store.ConfirmAsync(original, default));
 
@@ -45,7 +46,7 @@ public sealed class EmailConfirmationTests
             clock.Now += TimeSpan.FromSeconds(1);
             Assert.False(await store.ConfirmAsync(replacement, default));
 
-            var current = Assert.IsType<string>(await store.IssueAsync(owner, default));
+            var current = Assert.IsType<EmailConfirmationIssue>(await store.IssueAsync(owner, default)).Token;
             var confirmations = await Task.WhenAll(store.ConfirmAsync(current, default),
                 store.ConfirmAsync(current, default));
             Assert.Single(confirmations, result => result);
