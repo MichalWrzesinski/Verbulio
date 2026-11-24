@@ -40,6 +40,19 @@ jobs:
           retention-days: 7
           compression-level: 0
 
+      - name: Package the public site
+        working-directory: .
+        run: bash scripts/build-preview.sh "$RUNNER_TEMP/verbulio-public.tar.gz" public
+      - name: Keep the integrated public package
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: verbulio-public
+          path: ${{ runner.temp }}/verbulio-public.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
   backend:
     name: Backend checks
     runs-on: ubuntu-latest
