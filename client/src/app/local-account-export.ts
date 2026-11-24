@@ -2,6 +2,7 @@ import { afterNextRender, Component, ElementRef, viewChild } from '@angular/core
 import { RouterLink } from '@angular/router';
 
 @Component({
+  selector: 'app-local-account-export',
   imports: [RouterLink],
   styles: ':host { display: contents; }',
   template: `
@@ -25,8 +26,8 @@ import { RouterLink } from '@angular/router';
         <h1 #heading class="h1" tabindex="-1">Kopia Twoich danych</h1>
         <p>W tej wersji testowej obsługa wniosków o kopię danych jest w przygotowaniu.</p>
         <p>
-          Kopia w formacie JSON obejmuje adres e-mail, ustawienia konta, odpowiedzi z testu poziomu
-          i historię nauki.
+          Kopia w formacie JSON obejmuje adres <span class="nw">e-mail</span>, ustawienia konta,
+          odpowiedzi z testu poziomu i historię nauki.
         </p>
       </main>
     </div>
