@@ -102,6 +102,7 @@
               <p class="kv">
                 <span>E-mail:&nbsp;</span><strong>{{ address }}</strong>
               </p>
+              <a class="link" routerLink="/prywatnosc/eksport">Jak dostać kopię swoich danych</a>
             } @else if (contactError()) {
               <p role="alert">Nie udało się wczytać adresu e-mail.</p>
               <button type="button" class="key btn btn--secondary" (click)="loadContact()">

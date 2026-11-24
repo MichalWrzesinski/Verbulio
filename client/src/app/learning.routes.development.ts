@@ -34,6 +34,12 @@ export const learningRoutes: Routes = [
       import('./local-learning-settings').then((module) => module.LocalLearningSettings),
   },
   {
+    path: 'prywatnosc/eksport',
+    title: 'Kopia Twoich danych · Verbulio',
+    loadComponent: () =>
+      import('./local-account-export').then((module) => module.LocalAccountExport),
+  },
+  {
     path: 'lokalna-nauka',
     title: 'Sesja nauki · Verbulio',
     loadComponent: () => import('./local-learning').then((module) => module.LocalLearning),
