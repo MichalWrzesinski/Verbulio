@@ -1,0 +1,45 @@
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.AspNetCore.WebUtilities;
+using Npgsql;
+
+namespace Verbulio.Api;
+
+internal sealed class EmailConfirmationStore(NpgsqlDataSource dataSource, TimeProvider timeProvider)
+{
+    internal static readonly TimeSpan Lifetime = TimeSpan.FromHours(24);
+
+    internal async Task<string?> IssueAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        var token = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+        await using var command = dataSource.CreateCommand("""
+            UPDATE accounts
+            SET email_confirmation_digest = $1, email_confirmation_expires_at = $2
+            WHERE id = $3 AND email_confirmed_at IS NULL
+            """);
+        command.Parameters.AddWithValue(Digest(token));
+        command.Parameters.AddWithValue(timeProvider.GetUtcNow() + Lifetime);
+        command.Parameters.AddWithValue(accountId);
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1 ? token : null;
+    }
+
+    internal async Task<bool> ConfirmAsync(string token, CancellationToken cancellationToken)
+    {
+        if (token.Length != 43)
+        {
+            return false;
+        }
+
+        await using var command = dataSource.CreateCommand("""
+            UPDATE accounts
+            SET email_confirmed_at = $1, email_confirmation_digest = NULL, email_confirmation_expires_at = NULL
+            WHERE email_confirmation_digest = $2 AND email_confirmation_expires_at > $1
+                AND email_confirmed_at IS NULL
+            """);
+        command.Parameters.AddWithValue(timeProvider.GetUtcNow());
+        command.Parameters.AddWithValue(Digest(token));
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
+    private static byte[] Digest(string token) => SHA256.HashData(Encoding.UTF8.GetBytes(token));
+}
