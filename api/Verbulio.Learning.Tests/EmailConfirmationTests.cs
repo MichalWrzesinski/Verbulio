@@ -180,6 +180,7 @@ public sealed class EmailConfirmationTests
         Assert.False(await reset.ResetAsync(replacement.Token, newPassword, default));
 
         var valid = Assert.IsType<PasswordResetIssue>(await reset.IssueAsync(email, default));
+        clock.Now += TimeSpan.FromMinutes(30) - TimeSpan.FromSeconds(1);
         var session = Assert.IsType<AccountSession>(await sessions.ReplaceAsync(old, null, default));
         var second = Assert.IsType<AccountSession>(await sessions.ReplaceAsync(old, null, default));
         var peerSession = Assert.IsType<AccountSession>(await sessions.ReplaceAsync(peer, null, default));
@@ -194,6 +195,11 @@ public sealed class EmailConfirmationTests
         Assert.NotNull(await sessions.ReadAsync(peerSession.Id, default));
         Assert.Null(await sessions.ReplaceAsync(old, null, default));
         Assert.Null(await credentials.VerifyAsync(new LoginRequest { Email = email, Password = oldPassword }, default));
+        var fresh = Assert.IsType<PasswordResetIssue>(await reset.IssueAsync(email, default));
+        Assert.True(await reset.ResetAsync(fresh.Token, newPassword, default));
+        Assert.Null(await reset.IssueAsync(email, default));
+        clock.Now += TimeSpan.FromMinutes(1);
+        Assert.NotNull(await reset.IssueAsync(email, default));
         var current = Assert.IsType<VerifiedCredentials>(await credentials.VerifyAsync(
             new LoginRequest { Email = email, Password = newPassword }, default));
         Assert.NotNull(await sessions.ReplaceAsync(current, null, default));

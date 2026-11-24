@@ -61,8 +61,9 @@ internal sealed class PasswordResetStore(NpgsqlDataSource dataSource, IPasswordH
 
         await SessionStore.LockOwnerAsync(connection, transaction, account.Id, cancellationToken);
         var hash = passwordHasher.HashPassword(account, password);
+        // Keep the last expiry as the issuance clock even after consuming the digest.
         await using var reset = new NpgsqlCommand("""
-            UPDATE accounts SET password_hash = $1, password_reset_digest = NULL, password_reset_expires_at = NULL
+            UPDATE accounts SET password_hash = $1, password_reset_digest = NULL
             WHERE id = $2 AND password_reset_digest = $3 AND password_reset_expires_at > $4
             """, connection, transaction);
         reset.Parameters.AddWithValue(hash);
