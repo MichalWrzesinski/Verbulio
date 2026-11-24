@@ -9,7 +9,13 @@ internal static class PublicSite
 
     internal static async Task RunAsync(WebApplicationBuilder builder)
     {
-        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 5444));
+        var port = builder.Configuration.GetValue("PublicSite:Port", 5444);
+        if (port is not (5444 or 5445))
+        {
+            throw new InvalidOperationException("PublicSite:Port must be 5444 or 5445.");
+        }
+
+        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, port));
         builder.Services.Configure<ForwardedHeadersOptions>(options =>
         {
             options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
@@ -39,7 +45,22 @@ internal static class PublicSite
         });
 
         app.UseStaticFiles();
-        app.MapGet("/health", () => TypedResults.Ok());
+        var revisionPath = Path.Combine(app.Environment.ContentRootPath, "REVISION");
+        var revision = File.Exists(revisionPath) ? File.ReadAllText(revisionPath).Trim() : null;
+        if (revision is not null && (revision.Length != 40 || !revision.All(Uri.IsHexDigit)))
+        {
+            throw new InvalidOperationException("Invalid public release revision.");
+        }
+
+        app.MapGet("/health", (HttpContext context) =>
+        {
+            if (revision is not null)
+            {
+                context.Response.Headers["X-Verbulio-Revision"] = revision;
+            }
+
+            return TypedResults.Ok();
+        });
         app.Map("/api/{**path}", () => Results.NotFound());
         app.MapFallbackToFile("index.html");
 
