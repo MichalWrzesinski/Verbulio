@@ -2,7 +2,7 @@ import { Location } from '@angular/common';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { vi } from 'vitest';
 import { routes } from './app.routes';
@@ -98,7 +98,10 @@ describe('Public navigation', () => {
     const requests = TestBed.inject(HttpTestingController);
     const endpoint = '/api/v1/local-account/email-confirmation/confirm';
     requests.expectNone(endpoint);
-    expect(TestBed.inject(Location).path(true)).toBe('/potwierdz-adres');
+    await vi.waitFor(() => {
+      expect(TestBed.inject(Location).path(true)).toBe('/potwierdz-adres');
+      expect(TestBed.inject(Router).url).toBe('/potwierdz-adres');
+    });
 
     harness.routeNativeElement?.querySelector('button')?.click();
     harness.routeNativeElement?.querySelector('button')?.click();
@@ -112,6 +115,13 @@ describe('Public navigation', () => {
       'Adres potwierdzony',
     );
     expect(harness.routeNativeElement?.querySelector('a[href="/logowanie"]')).toBeTruthy();
+
+    await harness.navigateByUrl('/potwierdz-adres#token=' + token);
+    await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/potwierdz-adres'));
+    requests.expectNone(endpoint);
+    expect(harness.routeNativeElement?.querySelector('button')?.textContent?.trim()).toBe(
+      'Potwierdź adres',
+    );
   });
 
   it('replaces a pending confirmation when a second link opens on the same route', async () => {
@@ -125,7 +135,10 @@ describe('Public navigation', () => {
 
     await harness.navigateByUrl('/potwierdz-adres#token=' + replacement);
     expect(active.cancelled).toBe(true);
-    expect(TestBed.inject(Location).path(true)).toBe('/potwierdz-adres');
+    await vi.waitFor(() => {
+      expect(TestBed.inject(Location).path(true)).toBe('/potwierdz-adres');
+      expect(TestBed.inject(Router).url).toBe('/potwierdz-adres');
+    });
     requests.expectNone(endpoint);
     harness.routeNativeElement?.querySelector('button')?.click();
     const confirmation = requests.expectOne(endpoint);

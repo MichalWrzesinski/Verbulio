@@ -1,4 +1,3 @@
-import { Location } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import {
   afterNextRender,
@@ -11,8 +10,8 @@ import {
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, RouterLink } from '@angular/router';
-import { skip, takeUntil } from 'rxjs';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { Subject, takeUntil } from 'rxjs';
 import { accountEndpoint, accountRequestOptions } from './account-session-client';
 
 @Component({
@@ -83,6 +82,8 @@ export class LocalEmailConfirmation {
   private readonly injector = inject(Injector);
   private readonly heading = viewChild.required<ElementRef<HTMLElement>>('heading');
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly linkChanged = new Subject<void>();
   private token: string | null = null;
 
   protected readonly pending = signal(false);
@@ -91,23 +92,30 @@ export class LocalEmailConfirmation {
   protected readonly hasToken = signal(false);
 
   constructor() {
-    const location = inject(Location);
     this.route.fragment.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((fragment) => {
-      this.token = fragment?.match(/^token=([A-Za-z0-9_-]{43})$/)?.[1] ?? null;
+      if (fragment === null) return;
+
+      this.linkChanged.next();
+      this.token = fragment.match(/^token=([A-Za-z0-9_-]{43})$/)?.[1] ?? null;
       this.hasToken.set(this.token !== null);
       this.pending.set(false);
       this.confirmed.set(false);
       this.error.set('');
       afterNextRender(
         () => {
-          if (fragment !== null) {
-            location.replaceState(location.path(), '', location.getState());
-          }
+          if (this.route.snapshot.fragment !== fragment) return;
+
+          void this.router.navigate([], {
+            relativeTo: this.route,
+            queryParamsHandling: 'preserve',
+            replaceUrl: true,
+          });
           this.heading().nativeElement.focus();
         },
         { injector: this.injector },
       );
     });
+    afterNextRender(() => this.heading().nativeElement.focus());
   }
 
   protected confirm(): void {
@@ -124,7 +132,7 @@ export class LocalEmailConfirmation {
           observe: 'response',
         },
       )
-      .pipe(takeUntil(this.route.fragment.pipe(skip(1))), takeUntilDestroyed(this.destroyRef))
+      .pipe(takeUntil(this.linkChanged), takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
           this.pending.set(false);
