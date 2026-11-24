@@ -75,6 +75,8 @@ jobs:
             dotnet format whitespace "$project/$project.csproj" --verify-no-changes --no-restore || exit
           done
       - run: dotnet test Verbulio.Learning.Tests -c Release --no-restore
+        env:
+          VERBULIO_CONFIRMATION_TEST_DB: ${{ env.ConnectionStrings__Learning }}
       - run: dotnet build Verbulio.Api -c Release --no-restore
       - run: python3 checks/local_learning.py
         env:
