@@ -9,6 +9,18 @@ internal static class PublicSite
 
     internal static async Task RunAsync(WebApplicationBuilder builder)
     {
+        Configure(builder);
+        await using var app = builder.Build();
+        UseIngress(app);
+        MapHealth(app);
+        app.UseStaticFiles();
+        app.Map("/api/{**path}", () => Results.NotFound());
+        app.MapFallbackToFile("index.html");
+        await app.RunAsync();
+    }
+
+    internal static void Configure(WebApplicationBuilder builder)
+    {
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 5444));
         builder.Services.Configure<ForwardedHeadersOptions>(options =>
         {
@@ -19,8 +31,10 @@ internal static class PublicSite
             options.ForwardLimit = 1;
             options.RequireHeaderSymmetry = true;
         });
+    }
 
-        await using var app = builder.Build();
+    internal static void UseIngress(WebApplication app)
+    {
         app.UseForwardedHeaders();
         app.Use(async (context, next) =>
         {
@@ -37,8 +51,10 @@ internal static class PublicSite
             headers["Referrer-Policy"] = "no-referrer";
             await next(context);
         });
+    }
 
-        app.UseStaticFiles();
+    internal static void MapHealth(WebApplication app)
+    {
         var revisionPath = Path.Combine(app.Environment.ContentRootPath, "REVISION");
         var revision = File.Exists(revisionPath) ? File.ReadAllText(revisionPath).Trim() : null;
         if (revision is not null && (revision.Length != 40 || !revision.All(Uri.IsHexDigit)))
@@ -55,9 +71,5 @@ internal static class PublicSite
 
             return TypedResults.Ok();
         });
-        app.Map("/api/{**path}", () => Results.NotFound());
-        app.MapFallbackToFile("index.html");
-
-        await app.RunAsync();
     }
 }
