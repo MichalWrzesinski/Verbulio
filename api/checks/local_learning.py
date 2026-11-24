@@ -564,6 +564,37 @@ def exercise_email_confirmation(container, owner, anonymous, account, other_acco
     print("Account confirmation HTTPS endpoint, replay rejection and disabled delivery passed.")
 
 
+def exercise_password_reset(container, anonymous, account_browser, account, email):
+    path = ACCOUNT + "/password-reset/complete"
+    token = uuid.uuid4().hex + uuid.uuid4().hex[:11]
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    owner = uuid.UUID(account["id"])
+    subprocess.run(
+        ["docker", "exec", container, "psql", "-U", "postgres", "-d", "verbulio", "-q",
+         "-v", "ON_ERROR_STOP=1", "-c",
+         f"UPDATE accounts SET password_reset_digest = decode('{digest}', 'hex'), "
+         f"password_reset_expires_at = now() + interval '1 minute' WHERE id = '{owner}'"],
+        check=True, timeout=30
+    )
+
+    assert account_browser.request(ACCOUNT + "/session") == account
+    password = "Synthetic replacement password!"
+    payload = {"token": token, "password": password}
+    anonymous.request(path, 405)
+    anonymous.request(path, 403, "POST", payload, include_local_client=False)
+    assert anonymous.request(path, 400, "POST", {**payload, "password": "short"})["code"] == "invalid_new_password"
+    assert anonymous.request(path, 400, "POST", {**payload, "token": "invalid"})["code"] == "invalid_password_reset_token"
+    _, headers = anonymous.request(path, 204, "POST", payload, include_cookie_headers=True)
+    assert not any(header.startswith("verbulio.local-account=") for header in headers)
+    assert anonymous.request(path, 400, "POST", payload)["code"] == "invalid_password_reset_token"
+    account_browser.request(ACCOUNT + "/session", 401)
+    anonymous.request(ACCOUNT + "/login", 401, "POST", {"email": email, "password": "local fixture password!"})
+    assert anonymous.request(ACCOUNT + "/login", 200, "POST", {"email": email, "password": password}) == account
+    outcomes = [anonymous.request(path, (400, 429), "POST", payload) for _ in range(13)]
+    assert outcomes[-1] is None
+    print("Password reset HTTPS endpoint, one-time token, old session revocation and route limit passed.")
+
+
 def exercise_account_deletion(command, env, container, owner, other, anonymous, login, account, other_account, placement):
     def postgres(*args):
         return subprocess.check_output(["docker", "exec", container, *args], text=True, timeout=30).strip()
@@ -766,6 +797,15 @@ basicConstraints = critical,CA:TRUE
                     assert "Account deletion journal unavailable" in (Path(directory) / "api.log").read_text(
                         encoding="utf-8"
                     )
+
+                if container := env.get("VERBULIO_POSTGRES_CONTAINER"):
+                    stop(server)
+                    server = subprocess.Popen(command, env=env, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+                    wait_ready(server, base, tls)
+                    exercise_password_reset(container, anonymous, other, other_account, other_email)
+                    security_log = (Path(directory) / "api.log").read_text(encoding="utf-8")
+                    assert "Account password reset completed" in security_log
+                    assert "Account link rate limit reached" in security_log
 
                 if previous_api := os.environ.get("VERBULIO_PREVIOUS_API_DLL"):
                     stop(server)
