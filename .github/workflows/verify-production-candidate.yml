@@ -1,0 +1,52 @@
+name: Verify production candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Full commit SHA of the candidate
+        required: true
+      ci_run_id:
+        description: CI run ID from main
+        required: true
+      ci_run_attempt:
+        description: Successful CI attempt number
+        required: true
+      artifact_id:
+        description: Public artifact ID from that attempt
+        required: true
+      artifact_sha256:
+        description: SHA-256 of the GitHub artifact ZIP
+        required: true
+      ingress_sha256:
+        description: Expected SHA-256 of the active Nginx ingress snippet
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the exact candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVISION: ${{ inputs.revision }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+          CI_RUN_ATTEMPT: ${{ inputs.ci_run_attempt }}
+          ARTIFACT_ID: ${{ inputs.artifact_id }}
+          ARTIFACT_SHA256: ${{ inputs.artifact_sha256 }}
+          INGRESS_SHA256: ${{ inputs.ingress_sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/public/verify-candidate.sh "$REVISION" "$CI_RUN_ID" "$CI_RUN_ATTEMPT" \
+            "$ARTIFACT_ID" "$ARTIFACT_SHA256" "$INGRESS_SHA256" | tee -a "$GITHUB_STEP_SUMMARY"
