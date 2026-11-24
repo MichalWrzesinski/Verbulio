@@ -53,7 +53,7 @@ internal static class PublicSite
         });
     }
 
-    internal static void MapHealth(WebApplication app)
+    internal static void MapHealth(WebApplication app, Func<HttpContext, Task<bool>>? ready = null)
     {
         var revisionPath = Path.Combine(app.Environment.ContentRootPath, "REVISION");
         var revision = File.Exists(revisionPath) ? File.ReadAllText(revisionPath).Trim() : null;
@@ -62,14 +62,16 @@ internal static class PublicSite
             throw new InvalidOperationException("Invalid public release revision.");
         }
 
-        app.MapGet("/health", (HttpContext context) =>
+        app.MapGet("/health", async (HttpContext context) =>
         {
             if (revision is not null)
             {
                 context.Response.Headers["X-Verbulio-Revision"] = revision;
             }
 
-            return TypedResults.Ok();
+            return ready is null || await ready(context)
+                ? Results.Ok()
+                : Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
         });
     }
 }

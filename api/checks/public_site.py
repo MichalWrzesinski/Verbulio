@@ -46,7 +46,7 @@ def verify():
 
 
 @contextmanager
-def site(revision, staging_connection=None):
+def site(revision, staging_connection=None, journal_connection=None):
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         assets = root / "wwwroot"
@@ -60,6 +60,8 @@ def site(revision, staging_connection=None):
         command = [sys.argv[1] if len(sys.argv) > 1 else "dotnet", str(API)]
         if staging_connection:
             env["ConnectionStrings__StagingLearning"] = staging_connection
+            if journal_connection:
+                env["ConnectionStrings__StagingDeletionJournal"] = journal_connection
             env["LearningKeyDirectory"] = str(root / "keys")
             subprocess.run([*command, "--migrate"], cwd=root, env=env, check=True, timeout=30)
         with (root / "server.log").open("w+") as log:
@@ -93,9 +95,17 @@ def main():
         verify()
     print("Public runtime passed: loopback, revision-aware health and closed account API.")
     if connection := os.environ.get("ConnectionStrings__Learning"):
-        with site("b" * 40, connection):
+        journal = None
+        if container := os.environ.get("VERBULIO_POSTGRES_CONTAINER"):
+            subprocess.run(["docker", "exec", container, "createdb", "-U", "postgres",
+                            "verbulio_staging_test_deletions"], check=True, timeout=30)
+            journal = connection.replace("Database=verbulio;", "Database=verbulio_staging_test_deletions;")
+            assert journal != connection
+        with site("b" * 40, connection, journal):
             assert request("/health", {"Host": HOST})[0] == 400
             assert request("/api/v1/local-account/session")[0] == 401
+            if journal:
+                assert request("/api/v1/local-account/delete", method="POST")[0] == 401
             status, _, headers = request("/api/v1/local-learning/identity",
                                          headers=FORWARDED | {"X-Verbulio-Client": "local-learning"},
                                          method="POST", include_headers=True)

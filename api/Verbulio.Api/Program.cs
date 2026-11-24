@@ -116,7 +116,7 @@ builder.Services.AddRateLimiter(options =>
     if (staging)
     {
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-            !context.Request.Path.StartsWithSegments("/api")
+            !context.Request.Path.StartsWithSegments("/api") && context.Request.Path != "/health"
                 ? RateLimitPartition.GetNoLimiter("static")
                 : RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? string.Empty,
                     _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1) }));
@@ -196,7 +196,7 @@ app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
 
-if (staging) PublicSite.MapHealth(app);
+if (staging) PublicSite.MapHealth(app, StagingReady);
 else app.MapGet("/health", () => TypedResults.Ok());
 var learning = app.MapGroup("/api/v1/local-learning");
 learning.MapPost("/identity", async (HttpContext http) =>
@@ -424,6 +424,31 @@ if (preview || staging)
 }
 
 await app.RunAsync();
+
+static async Task<bool> StagingReady(HttpContext context)
+{
+    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
+    timeout.CancelAfter(TimeSpan.FromSeconds(2));
+    try
+    {
+        var database = context.RequestServices.GetRequiredService<NpgsqlDataSource>();
+        await using var command = database.CreateCommand("SELECT id FROM accounts LIMIT 0");
+        await command.ExecuteNonQueryAsync(timeout.Token);
+        if (context.RequestServices.GetService<AccountDeletionJournal>() is { } journal)
+        {
+            await journal.CheckReadinessAsync(timeout.Token);
+        }
+        return true;
+    }
+    catch (NpgsqlException)
+    {
+        return false;
+    }
+    catch (OperationCanceledException) when (!context.RequestAborted.IsCancellationRequested)
+    {
+        return false;
+    }
+}
 
 static Guid? SessionId(ClaimsPrincipal? user) =>
     Guid.TryParseExact(user?.FindFirstValue(AccountSessions.IdClaim), "D", out var id) ? id : null;
