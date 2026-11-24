@@ -1,7 +1,8 @@
+import { Location } from '@angular/common';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { vi } from 'vitest';
 import { routes } from './app.routes';
@@ -89,6 +90,77 @@ describe('Public navigation', () => {
 
     expect(harness.routeNativeElement?.querySelector('a[href="/logowanie"]')).toBeTruthy();
     expect(harness.routeNativeElement?.querySelector('a[href="/prywatnosc/eksport"]')).toBeNull();
+  });
+
+  it('removes the link secret and posts it only after confirmation', async () => {
+    const token = 'a'.repeat(43);
+    const harness = await RouterTestingHarness.create('/potwierdz-adres#token=' + token);
+    const requests = TestBed.inject(HttpTestingController);
+    const endpoint = '/api/v1/local-account/email-confirmation/confirm';
+    requests.expectNone(endpoint);
+    await vi.waitFor(() => {
+      expect(TestBed.inject(Location).path(true)).toBe('/potwierdz-adres');
+      expect(TestBed.inject(Router).url).toBe('/potwierdz-adres');
+    });
+
+    harness.routeNativeElement?.querySelector('button')?.click();
+    harness.routeNativeElement?.querySelector('button')?.click();
+    const confirmation = requests.expectOne({ method: 'POST', url: endpoint });
+    expect(confirmation.request.body).toEqual({ token });
+    expect(confirmation.request.headers.get('X-Verbulio-Client')).toBe('local-learning');
+    confirmation.flush(null, { status: 204, statusText: 'No Content' });
+    harness.detectChanges();
+
+    expect(harness.routeNativeElement?.querySelector('h1')?.textContent?.trim()).toBe(
+      'Adres potwierdzony',
+    );
+    expect(harness.routeNativeElement?.querySelector('a[href="/logowanie"]')).toBeTruthy();
+
+    await harness.navigateByUrl('/potwierdz-adres#token=' + token);
+    await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/potwierdz-adres'));
+    requests.expectNone(endpoint);
+    expect(harness.routeNativeElement?.querySelector('button')?.textContent?.trim()).toBe(
+      'Potwierdź adres',
+    );
+  });
+
+  it('replaces a pending confirmation when a second link opens on the same route', async () => {
+    const original = 'a'.repeat(43);
+    const replacement = 'b'.repeat(43);
+    const harness = await RouterTestingHarness.create('/potwierdz-adres#token=' + original);
+    const requests = TestBed.inject(HttpTestingController);
+    const endpoint = '/api/v1/local-account/email-confirmation/confirm';
+    harness.routeNativeElement?.querySelector('button')?.click();
+    const active = requests.expectOne(endpoint);
+
+    await harness.navigateByUrl('/potwierdz-adres#token=' + replacement);
+    expect(active.cancelled).toBe(true);
+    await vi.waitFor(() => {
+      expect(TestBed.inject(Location).path(true)).toBe('/potwierdz-adres');
+      expect(TestBed.inject(Router).url).toBe('/potwierdz-adres');
+    });
+    requests.expectNone(endpoint);
+    harness.routeNativeElement?.querySelector('button')?.click();
+    const confirmation = requests.expectOne(endpoint);
+    expect(confirmation.request.body).toEqual({ token: replacement });
+    confirmation.flush(null, { status: 204, statusText: 'No Content' });
+  });
+
+  it('reports an invalid confirmation link without a success state', async () => {
+    const harness = await RouterTestingHarness.create('/potwierdz-adres#token=' + 'a'.repeat(43));
+    harness.routeNativeElement?.querySelector('button')?.click();
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/v1/local-account/email-confirmation/confirm')
+      .flush({ code: 'invalid_confirmation_token' }, { status: 400, statusText: 'Bad Request' });
+    harness.detectChanges();
+
+    expect(harness.routeNativeElement?.querySelector('[role=alert]')?.textContent).toContain(
+      'nieprawidłowy lub wygasł',
+    );
+    expect(harness.routeNativeElement?.querySelector('button')).toBeNull();
+    expect(harness.routeNativeElement?.querySelector('h1')?.textContent?.trim()).toBe(
+      'Potwierdź adres e-mail',
+    );
   });
 
   it('keeps credential fields off the HTTP development login page', async () => {
