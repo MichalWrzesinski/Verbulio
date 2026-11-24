@@ -538,7 +538,7 @@ def exercise_email_confirmation(container, owner, anonymous, account, other_acco
     endpoint = ACCOUNT + "/email-confirmation"
     anonymous.request(endpoint + "/send", 401, "POST")
     owner.request(endpoint + "/send", 403, "POST", include_local_client=False)
-    owner.request(endpoint + "/send", 503, "POST")
+    assert owner.request(endpoint + "/send", 503, "POST")["code"] == "confirmation_delivery_unavailable"
     token = uuid.uuid4().hex + uuid.uuid4().hex[:11]
     digest = hashlib.sha256(token.encode()).hexdigest()
 
@@ -558,7 +558,7 @@ def exercise_email_confirmation(container, owner, anonymous, account, other_acco
     anonymous.request(path, 403, "POST", payload, include_local_client=False)
     anonymous.request(path, 400, "POST", {"token": "invalid"})
     anonymous.request(path, 204, "POST", payload)
-    anonymous.request(path, 400, "POST", payload)
+    assert anonymous.request(path, 400, "POST", payload)["code"] == "invalid_confirmation_token"
     assert sql(f"SELECT email_confirmed_at IS NOT NULL FROM accounts WHERE id = '{owner_id}'") == "t"
     assert sql(f"SELECT email_confirmed_at IS NULL FROM accounts WHERE id = '{peer_id}'") == "t"
     print("Account confirmation HTTPS endpoint, replay rejection and disabled delivery passed.")

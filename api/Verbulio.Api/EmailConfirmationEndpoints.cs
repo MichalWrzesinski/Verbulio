@@ -41,7 +41,7 @@ internal static class EmailConfirmationEndpoints
             CancellationToken cancellationToken) =>
             request.Token is { } token && await store.ConfirmAsync(token, cancellationToken)
                 ? Results.NoContent()
-                : Results.Problem(statusCode: 400, title: "Link potwierdzający jest nieprawidłowy lub wygasł."))
+                : Problem(400, "invalid_confirmation_token", "Link potwierdzający jest nieprawidłowy lub wygasł."))
             .RequireRateLimiting(rateLimit).AddEndpointFilter(clientFilter);
 
         account.MapPost("/email-confirmation/send", async (ClaimsPrincipal user, HttpContext http,
@@ -50,7 +50,7 @@ internal static class EmailConfirmationEndpoints
             var mail = http.RequestServices.GetService<ConfirmationMail>();
             if (mail is null)
             {
-                return Results.Problem(statusCode: 503, title: "Wysyłka potwierdzeń jest niedostępna.");
+                return Problem(503, "confirmation_delivery_unavailable", "Wysyłka potwierdzeń jest niedostępna.");
             }
 
             var owner = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -62,10 +62,13 @@ internal static class EmailConfirmationEndpoints
 
             var result = await mail.SendAsync(issue, cancellationToken);
             return result == MailSubmission.Rejected
-                ? Results.Problem(statusCode: 503, title: "Nie udało się wysłać wiadomości potwierdzającej.")
+                ? Problem(503, "confirmation_delivery_rejected", "Nie udało się wysłać wiadomości potwierdzającej.")
                 : Results.Accepted();
         }).RequireAuthorization(accountOnly).RequireRateLimiting(rateLimit).AddEndpointFilter(clientFilter);
     }
+
+    private static IResult Problem(int status, string code, string title) =>
+        Results.Problem(statusCode: status, title: title, extensions: new Dictionary<string, object?> { ["code"] = code });
 }
 
 internal sealed record ConfirmationRequest(string? Token);
