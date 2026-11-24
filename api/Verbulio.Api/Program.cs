@@ -21,7 +21,7 @@ if (args.Length > 0 && args[0] == "--export-account")
 
 const string accountScheme = "LocalAccount";
 const string loginLimit = "LocalAccountLogin";
-const string confirmationLimit = "LocalEmailConfirmation";
+const string accountLinkLimit = "LocalAccountLink";
 var builder = WebApplication.CreateBuilder(args);
 if (builder.Environment.IsEnvironment("Public"))
 {
@@ -46,6 +46,7 @@ if (!string.IsNullOrWhiteSpace(journalConnection))
 }
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddEmailConfirmation(builder.Configuration);
+builder.Services.AddSingleton<PasswordResetStore>();
 builder.Services.AddSingleton<SessionStore>();
 builder.Services.AddSingleton<AccountSettingsStore>();
 builder.Services.AddSingleton<GuestPlacementStore>();
@@ -122,7 +123,7 @@ builder.Services.AddRateLimiter(options =>
             PermitLimit = 12,
             Window = TimeSpan.FromMinutes(1),
         }));
-    options.AddPolicy(confirmationLimit, context => RateLimitPartition.GetFixedWindowLimiter(
+    options.AddPolicy(accountLinkLimit, context => RateLimitPartition.GetFixedWindowLimiter(
         (context.Connection.RemoteIpAddress?.ToString(), context.GetEndpoint()?.DisplayName),
         _ => new FixedWindowRateLimiterOptions
         {
@@ -219,7 +220,19 @@ var account = app.MapGroup("/api/v1/local-account")
         ? next(context)
         : ValueTask.FromResult<object?>(Problem(400, "secure_connection_required", "Wymagane jest połączenie HTTPS.")));
 var accountOnly = new AuthorizeAttribute { AuthenticationSchemes = accountScheme };
-account.MapEmailConfirmation(accountOnly, confirmationLimit, RequireLocalClient);
+account.MapEmailConfirmation(accountOnly, accountLinkLimit, RequireLocalClient);
+account.MapPost("/password-reset/complete", async (PasswordResetRequest request, PasswordResetStore store,
+    CancellationToken cancellationToken) =>
+{
+    if (request.Password is not { } password || !AccountRegistration.IsValidPassword(password))
+    {
+        return Problem(400, "invalid_new_password", "Podaj nowe hasło od 12 do 128 znaków.");
+    }
+
+    return request.Token is { } token && await store.ResetAsync(token, password, cancellationToken)
+        ? Results.NoContent()
+        : Problem(400, "invalid_password_reset_token", "Link do zmiany hasła jest nieprawidłowy lub wygasł.");
+}).RequireRateLimiting(accountLinkLimit).AddEndpointFilter(RequireLocalClient);
 account.MapGet("/profile", async (HttpContext http, ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
     Results.Ok(await store.ProfileProgressAsync(Owner(user), StartingLevel(user), BrowserTimeZone(http), cancellationToken)))
     .RequireAuthorization(accountOnly);

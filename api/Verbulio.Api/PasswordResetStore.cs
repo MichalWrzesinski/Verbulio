@@ -4,6 +4,8 @@ using Verbulio.Learning.Placement;
 
 namespace Verbulio.Api;
 
+internal sealed record PasswordResetRequest(string? Token, string? Password);
+
 internal sealed class PasswordResetIssue(string email, string token)
 {
     internal string Email { get; } = email;
