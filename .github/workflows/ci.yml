@@ -40,19 +40,6 @@ jobs:
           retention-days: 7
           compression-level: 0
 
-      - name: Package the public site
-        working-directory: .
-        run: bash scripts/build-preview.sh "$RUNNER_TEMP/verbulio-public.tar.gz" public
-      - name: Keep the integrated public package
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v7
-        with:
-          name: verbulio-public-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/verbulio-public.tar.gz
-          if-no-files-found: error
-          retention-days: 7
-          compression-level: 0
-
   backend:
     name: Backend checks
     runs-on: ubuntu-latest
@@ -95,3 +82,33 @@ jobs:
       - run: python3 checks/local_learning.py
         env:
           VERBULIO_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+
+
+  public-package:
+    name: Public package
+    runs-on: ubuntu-latest
+    needs: [frontend, backend]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: client/.nvmrc
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+        working-directory: client
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: api/global.json
+      - name: Package the public site
+        working-directory: .
+        run: bash scripts/build-preview.sh "$RUNNER_TEMP/verbulio-public.tar.gz" public
+      - name: Keep the integrated public package
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: verbulio-public-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/verbulio-public.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0

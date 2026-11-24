@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: verbulio-public-site
-  cancel-in-progress: false
+  queue: max
 
 jobs:
   deploy:
