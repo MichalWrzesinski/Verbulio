@@ -4,7 +4,12 @@ import { learningRoutes } from './learning.routes';
 import { PendingPage } from './pending-page';
 
 export const routes: Routes = [
-  { path: '', pathMatch: 'full', component: Landing },
+  {
+    path: '',
+    pathMatch: 'full',
+    component: Landing,
+    data: { learningAvailable: learningRoutes.some((route) => route.path === 'test') },
+  },
   ...learningRoutes,
   {
     path: 'test',
