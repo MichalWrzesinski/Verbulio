@@ -11,6 +11,12 @@ mkdir -p "$root/releases"
 cd "$root"
 exec 9>.deploy.lock
 flock -n 9
+if [[ -e /etc/nginx/snippets/verbulio-public.conf ]]; then
+  printf 'The staging workflow cannot replace a publicly activated release.\n' >&2
+  exit 1
+fi
+
+runtime_image=mcr.microsoft.com/dotnet/aspnet:10.0@sha256:aac50ceef10391e78a899e3d2ccd00bbafa2dcb56ccf4586cbccf00edb84fc21
 
 (cd "$source_dir" && sha256sum --strict -c SHA256SUMS)
 [[ "$(tar -xOzf "$archive" ./REVISION)" == "$revision" ]]
@@ -20,6 +26,8 @@ if [[ ! -d "$release" ]]; then
   candidate="$(mktemp -d releases/.extract.XXXXXX)"
   trap 'rm -rf -- "$candidate"' EXIT
   tar --extract --gzip --no-same-owner --file "$archive" --directory "$candidate"
+  install -m 644 "$source_dir/nginx-location.conf" "$candidate/nginx-location.conf"
+  printf '%s\n' "$runtime_image" > "$candidate/runtime-image"
   mv -T -- "$candidate" "$release"
   trap - EXIT
 fi
@@ -30,12 +38,18 @@ engine=(docker --host unix:///var/run/docker.sock)
 
 start() {
   local selected="$1"
+  local image
+  image="$(cat "$selected/runtime-image")" || return 1
+  [[ "$image" =~ ^mcr\.microsoft\.com/dotnet/aspnet:10\.0@sha256:[0-9a-f]{64}$ ]] || return 1
+  if ! "${engine[@]}" image inspect "$image" >/dev/null 2>&1; then
+    "${engine[@]}" pull "$image" || return 1
+  fi
   "${engine[@]}" rm -f "$container" >/dev/null 2>&1 || true
   "${engine[@]}" run -d --name "$container" --network host --restart unless-stopped \
     --user "$(id -u):$(id -g)" --read-only --tmpfs /tmp --cap-drop ALL \
     --security-opt no-new-privileges --memory 256m \
     --mount "type=bind,source=$selected,target=/app,readonly" \
-    -e ASPNETCORE_ENVIRONMENT=Public -w /app mcr.microsoft.com/dotnet/aspnet:10.0 \
+    -e ASPNETCORE_ENVIRONMENT=Public -w /app --pull never "$image" \
     dotnet Verbulio.Api.dll >/dev/null
 }
 
@@ -52,15 +66,14 @@ healthy() {
 }
 
 previous=
-if [[ -f current-release ]]; then
-  previous="$(cat current-release)"
+if [[ -L current-release ]]; then
+  previous="$(readlink current-release)"
   [[ "$previous" =~ ^/srv/Verbulio/\.runtime/releases/[0-9a-f]{40}-[0-9a-f]{64}$ && -d "$previous" ]]
 fi
-if start "$release" && healthy; then
-  install -m 644 "$source_dir/nginx-location.conf" nginx-location.conf.tmp
-  mv -T nginx-location.conf.tmp nginx-location.conf
-  printf '%s\n' "$release" > current-release.tmp
-  mv -T current-release.tmp current-release
+pointer="$(mktemp -d .promote.XXXXXX)"
+trap 'rm -rf -- "$pointer"' EXIT
+ln -s -- "$release" "$pointer/current-release"
+if start "$release" && healthy && mv -T -- "$pointer/current-release" current-release; then
   printf 'Public release %s is healthy on loopback.\n' "$revision"
   exit 0
 fi

@@ -7,6 +7,14 @@ on:
         description: Successful CI run ID from main
         required: true
         type: string
+      ci_run_attempt:
+        description: Successful attempt number of the CI run
+        required: true
+        type: string
+      artifact_id:
+        description: Immutable public artifact ID for that attempt
+        required: true
+        type: string
 
 permissions:
   actions: read
@@ -31,11 +39,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CI_RUN_ID: ${{ inputs.ci_run_id }}
+          CI_RUN_ATTEMPT: ${{ inputs.ci_run_attempt }}
+          ARTIFACT_ID: ${{ inputs.artifact_id }}
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$CI_RUN_ID" =~ ^[0-9]+$ ]]
-          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID")"
+          [[ "$CI_RUN_ID" =~ ^[0-9]+$ && "$CI_RUN_ATTEMPT" =~ ^[0-9]+$ && "$ARTIFACT_ID" =~ ^[0-9]+$ ]]
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID/attempts/$CI_RUN_ATTEMPT")"
           revision="$(jq -er --arg repo "$GITHUB_REPOSITORY" '
             select(.path == ".github/workflows/ci.yml" and .event == "push"
               and .head_branch == "main" and .conclusion == "success"
@@ -43,8 +53,14 @@ jobs:
           ' <<< "$run")"
           [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
           [[ "$(git rev-parse HEAD)" == "$revision" ]]
+          name="verbulio-public-$CI_RUN_ATTEMPT"
+          artifact="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID/artifacts?name=$name")"
+          jq -e --arg id "$ARTIFACT_ID" --arg name "$name" '
+            .artifacts | any((.id | tostring) == $id and .name == $name and .expired == false)
+          ' <<< "$artifact" >/dev/null
           cd "$RUNNER_TEMP"
-          gh run download "$CI_RUN_ID" --repo "$GITHUB_REPOSITORY" --name verbulio-public
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > public-artifact.zip
+          unzip -p public-artifact.zip verbulio-public.tar.gz > verbulio-public.tar.gz
           [[ "$(tar -xOzf verbulio-public.tar.gz ./REVISION)" == "$revision" ]]
           sha256sum verbulio-public.tar.gz > SHA256SUMS
           printf 'PUBLIC_REVISION=%s\n' "$revision" >> "$GITHUB_ENV"

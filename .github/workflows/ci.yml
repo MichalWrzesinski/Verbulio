@@ -47,7 +47,7 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v7
         with:
-          name: verbulio-public
+          name: verbulio-public-${{ github.run_attempt }}
           path: ${{ runner.temp }}/verbulio-public.tar.gz
           if-no-files-found: error
           retention-days: 7
