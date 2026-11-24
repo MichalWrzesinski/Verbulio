@@ -113,7 +113,16 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.OnRejected = (context, _) =>
     {
-        AccountSecurityEvents.LoginLimited(context.HttpContext.RequestServices.GetRequiredService<ILogger<AccountSessions>>());
+        var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<AccountSessions>>();
+        var policy = context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
+        if (policy == accountLinkLimit)
+        {
+            AccountSecurityEvents.AccountLinkLimited(logger);
+        }
+        else
+        {
+            AccountSecurityEvents.LoginLimited(logger);
+        }
         return ValueTask.CompletedTask;
     };
     options.AddPolicy(loginLimit, context => RateLimitPartition.GetFixedWindowLimiter(
@@ -222,16 +231,20 @@ var account = app.MapGroup("/api/v1/local-account")
 var accountOnly = new AuthorizeAttribute { AuthenticationSchemes = accountScheme };
 account.MapEmailConfirmation(accountOnly, accountLinkLimit, RequireLocalClient);
 account.MapPost("/password-reset/complete", async (PasswordResetRequest request, PasswordResetStore store,
-    CancellationToken cancellationToken) =>
+    ILogger<PasswordResetStore> logger, CancellationToken cancellationToken) =>
 {
     if (request.Password is not { } password || !AccountRegistration.IsValidPassword(password))
     {
         return Problem(400, "invalid_new_password", "Podaj nowe hasło od 12 do 128 znaków.");
     }
 
-    return request.Token is { } token && await store.ResetAsync(token, password, cancellationToken)
-        ? Results.NoContent()
-        : Problem(400, "invalid_password_reset_token", "Link do zmiany hasła jest nieprawidłowy lub wygasł.");
+    if (request.Token is not { } token || !await store.ResetAsync(token, password, cancellationToken))
+    {
+        return Problem(400, "invalid_password_reset_token", "Link do zmiany hasła jest nieprawidłowy lub wygasł.");
+    }
+
+    AccountSecurityEvents.PasswordResetCompleted(logger);
+    return Results.NoContent();
 }).RequireRateLimiting(accountLinkLimit).AddEndpointFilter(RequireLocalClient);
 account.MapGet("/profile", async (HttpContext http, ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
     Results.Ok(await store.ProfileProgressAsync(Owner(user), StartingLevel(user), BrowserTimeZone(http), cancellationToken)))

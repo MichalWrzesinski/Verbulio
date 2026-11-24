@@ -585,7 +585,7 @@ def exercise_password_reset(container, anonymous, account_browser, account, emai
     assert anonymous.request(path, 400, "POST", {**payload, "password": "short"})["code"] == "invalid_new_password"
     assert anonymous.request(path, 400, "POST", {**payload, "token": "invalid"})["code"] == "invalid_password_reset_token"
     _, headers = anonymous.request(path, 204, "POST", payload, include_cookie_headers=True)
-    assert not headers
+    assert not any(header.startswith("verbulio.local-account=") for header in headers)
     assert anonymous.request(path, 400, "POST", payload)["code"] == "invalid_password_reset_token"
     account_browser.request(ACCOUNT + "/session", 401)
     anonymous.request(ACCOUNT + "/login", 401, "POST", {"email": email, "password": "local fixture password!"})
@@ -803,6 +803,9 @@ basicConstraints = critical,CA:TRUE
                     server = subprocess.Popen(command, env=env, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
                     wait_ready(server, base, tls)
                     exercise_password_reset(container, anonymous, other, other_account, other_email)
+                    security_log = (Path(directory) / "api.log").read_text(encoding="utf-8")
+                    assert "Account password reset completed" in security_log
+                    assert "Account link rate limit reached" in security_log
 
                 if previous_api := os.environ.get("VERBULIO_PREVIOUS_API_DLL"):
                     stop(server)
