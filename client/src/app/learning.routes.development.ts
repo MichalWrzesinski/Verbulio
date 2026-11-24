@@ -40,6 +40,12 @@ export const learningRoutes: Routes = [
       import('./local-account-export').then((module) => module.LocalAccountExport),
   },
   {
+    path: 'potwierdz-adres',
+    title: 'Potwierdź adres e-mail · Verbulio',
+    loadComponent: () =>
+      import('./local-email-confirmation').then((module) => module.LocalEmailConfirmation),
+  },
+  {
     path: 'lokalna-nauka',
     title: 'Sesja nauki · Verbulio',
     loadComponent: () => import('./local-learning').then((module) => module.LocalLearning),
