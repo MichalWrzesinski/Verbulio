@@ -26,6 +26,9 @@ internal sealed class AccountRegistration
 
     internal static string NormalizeEmail(string email) => email.ToUpperInvariant();
 
+    internal static bool IsValidPassword(string password) =>
+        password.Length <= 256 && password.EnumerateRunes().Count() is >= 12 and <= 128;
+
     internal static AccountRegistration? FromRequest(RegistrationRequest request)
     {
         var email = request.Email?.Trim();
@@ -33,8 +36,7 @@ internal sealed class AccountRegistration
             || email.Any(character => char.IsControl(character) || char.IsWhiteSpace(character))
             || !MailAddress.TryCreate(email, out var address)
             || !string.Equals(address.Address, email, StringComparison.Ordinal)
-            || request.Password is not { } password || password.Length > 256
-            || password.EnumerateRunes().Count() is < 12 or > 128)
+            || request.Password is not { } password || !IsValidPassword(password))
         {
             return null;
         }

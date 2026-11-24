@@ -4,17 +4,19 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Verbulio.Api;
+using Verbulio.Learning.Placement;
 
 namespace Verbulio.Learning.Tests;
 
 public sealed class EmailConfirmationTests
 {
     [Fact]
-    public async Task ConfirmationIsExpiringSingleUseAndScopedToItsAccount()
+    public async Task AccountLinksAreExpiringSingleUseAndScopedToTheirAccount()
     {
         if (Environment.GetEnvironmentVariable("VERBULIO_CONFIRMATION_TEST_DB") is not { } connection)
         {
@@ -74,6 +76,7 @@ public sealed class EmailConfirmationTests
             Assert.Null(await store.IssueAsync(peer, default));
 
             await ExerciseSendEndpointAsync(dataSource, store, clock);
+            await ExercisePasswordResetAsync(dataSource, clock);
         }
         finally
         {
@@ -144,6 +147,64 @@ public sealed class EmailConfirmationTests
         Assert.Equal(3, captured.Count);
     }
 
+    private static async Task ExercisePasswordResetAsync(NpgsqlDataSource dataSource, ConfirmationClock clock)
+    {
+        const string oldPassword = "Synthetic old password";
+        const string newPassword = "Synthetic new password";
+        const string email = "reset@example.invalid";
+        const string peerEmail = "reset-peer@example.invalid";
+        await ApplyMigrationAsync(dataSource, "004-account-sessions.sql");
+        var hasher = new PasswordHasher<RegisteredAccount>();
+        var hash = hasher.HashPassword(new RegisteredAccount(Guid.Empty, VocabularyLevel.A1), oldPassword);
+        await CreateAccountAsync(dataSource, email, hash);
+        await CreateAccountAsync(dataSource, peerEmail, hash);
+        await ApplyMigrationAsync(dataSource, "008-password-reset.sql");
+        await ApplyMigrationAsync(dataSource, "008-password-reset.sql");
+
+        var credentials = new AccountCredentials(dataSource, hasher);
+        var old = Assert.IsType<VerifiedCredentials>(await credentials.VerifyAsync(
+            new LoginRequest { Email = email, Password = oldPassword }, default));
+        var peer = Assert.IsType<VerifiedCredentials>(await credentials.VerifyAsync(
+            new LoginRequest { Email = peerEmail, Password = oldPassword }, default));
+        var sessions = new AccountSessions(dataSource, clock);
+        var reset = new PasswordResetStore(dataSource, hasher, clock);
+
+        Assert.Null(await reset.IssueAsync("missing@example.invalid", default));
+        var original = Assert.IsType<PasswordResetIssue>(await reset.IssueAsync(" RESET@example.invalid ", default));
+        Assert.Equal(email, original.Email);
+        Assert.Null(await reset.IssueAsync(email, default));
+        clock.Now += TimeSpan.FromMinutes(1);
+        var replacement = Assert.IsType<PasswordResetIssue>(await reset.IssueAsync(email, default));
+        Assert.False(await reset.ResetAsync(original.Token, newPassword, default));
+        clock.Now += TimeSpan.FromMinutes(30);
+        Assert.False(await reset.ResetAsync(replacement.Token, newPassword, default));
+
+        var valid = Assert.IsType<PasswordResetIssue>(await reset.IssueAsync(email, default));
+        clock.Now += TimeSpan.FromMinutes(30) - TimeSpan.FromSeconds(1);
+        var session = Assert.IsType<AccountSession>(await sessions.ReplaceAsync(old, null, default));
+        var second = Assert.IsType<AccountSession>(await sessions.ReplaceAsync(old, null, default));
+        var peerSession = Assert.IsType<AccountSession>(await sessions.ReplaceAsync(peer, null, default));
+        Assert.False(await reset.ResetAsync(valid.Token, "too short", default));
+        var attempts = await Task.WhenAll(reset.ResetAsync(valid.Token, newPassword, default),
+            reset.ResetAsync(valid.Token, newPassword, default));
+        Assert.Single(attempts, result => result);
+        Assert.False(await reset.ResetAsync(valid.Token, newPassword, default));
+
+        Assert.Null(await sessions.ReadAsync(session.Id, default));
+        Assert.Null(await sessions.ReadAsync(second.Id, default));
+        Assert.NotNull(await sessions.ReadAsync(peerSession.Id, default));
+        Assert.Null(await sessions.ReplaceAsync(old, null, default));
+        Assert.Null(await credentials.VerifyAsync(new LoginRequest { Email = email, Password = oldPassword }, default));
+        var fresh = Assert.IsType<PasswordResetIssue>(await reset.IssueAsync(email, default));
+        Assert.True(await reset.ResetAsync(fresh.Token, newPassword, default));
+        Assert.Null(await reset.IssueAsync(email, default));
+        clock.Now += TimeSpan.FromMinutes(1);
+        Assert.NotNull(await reset.IssueAsync(email, default));
+        var current = Assert.IsType<VerifiedCredentials>(await credentials.VerifyAsync(
+            new LoginRequest { Email = email, Password = newPassword }, default));
+        Assert.NotNull(await sessions.ReplaceAsync(current, null, default));
+    }
+
     private static async Task ApplyMigrationAsync(NpgsqlDataSource dataSource, string name)
     {
         await using var stream = typeof(EmailConfirmationStore).Assembly
@@ -153,7 +214,7 @@ public sealed class EmailConfirmationTests
         await migration.ExecuteNonQueryAsync();
     }
 
-    private static async Task<Guid> CreateAccountAsync(NpgsqlDataSource dataSource, string email)
+    private static async Task<Guid> CreateAccountAsync(NpgsqlDataSource dataSource, string email, string passwordHash = "fixture")
     {
         var owner = Guid.NewGuid();
         await using var command = dataSource.CreateCommand("""
@@ -163,10 +224,11 @@ public sealed class EmailConfirmationTests
                 RETURNING id
             )
             INSERT INTO accounts (id, email, normalized_email, password_hash, starting_level, placement_test_id, created_at)
-            SELECT $1, $2, upper($2), 'fixture', 0, id, now() FROM fixture
+            SELECT $1, $2, upper($2), $3, 0, id, now() FROM fixture
             """);
         command.Parameters.AddWithValue(owner);
         command.Parameters.AddWithValue(email);
+        command.Parameters.AddWithValue(passwordHash);
         await command.ExecuteNonQueryAsync();
         return owner;
     }

@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-using Microsoft.AspNetCore.WebUtilities;
 using Npgsql;
 
 namespace Verbulio.Api;
@@ -14,7 +11,7 @@ internal sealed class EmailConfirmationStore(NpgsqlDataSource dataSource, TimePr
     internal async Task<EmailConfirmationIssue?> IssueAsync(Guid accountId, CancellationToken cancellationToken,
         TimeSpan minimumInterval = default)
     {
-        var token = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+        var token = AccountLinkToken.Create();
         var expiresAt = timeProvider.GetUtcNow() + Lifetime;
         await using var command = dataSource.CreateCommand("""
             UPDATE accounts
@@ -23,7 +20,7 @@ internal sealed class EmailConfirmationStore(NpgsqlDataSource dataSource, TimePr
                 AND (email_confirmation_expires_at IS NULL OR email_confirmation_expires_at <= $4)
             RETURNING email
             """);
-        command.Parameters.AddWithValue(Digest(token));
+        command.Parameters.AddWithValue(AccountLinkToken.Digest(token));
         command.Parameters.AddWithValue(expiresAt);
         command.Parameters.AddWithValue(accountId);
         command.Parameters.AddWithValue(expiresAt - minimumInterval);
@@ -34,7 +31,7 @@ internal sealed class EmailConfirmationStore(NpgsqlDataSource dataSource, TimePr
 
     internal async Task<bool> ConfirmAsync(string token, CancellationToken cancellationToken)
     {
-        if (token.Length != 43)
+        if (token.Length != AccountLinkToken.EncodedLength)
         {
             return false;
         }
@@ -46,9 +43,7 @@ internal sealed class EmailConfirmationStore(NpgsqlDataSource dataSource, TimePr
                 AND email_confirmed_at IS NULL
             """);
         command.Parameters.AddWithValue(timeProvider.GetUtcNow());
-        command.Parameters.AddWithValue(Digest(token));
+        command.Parameters.AddWithValue(AccountLinkToken.Digest(token));
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
     }
-
-    private static byte[] Digest(string token) => SHA256.HashData(Encoding.UTF8.GetBytes(token));
 }
