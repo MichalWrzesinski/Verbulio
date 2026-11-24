@@ -30,6 +30,12 @@ internal sealed class AccountDeletionJournal : IAsyncDisposable
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    internal async Task CheckReadinessAsync(CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand("SELECT account_id FROM verified_account_deletions LIMIT 0");
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     internal async Task RecordAsync(Guid owner, CancellationToken cancellationToken)
     {
         await using var command = dataSource.CreateCommand("""

@@ -30,15 +30,16 @@ if (builder.Environment.IsEnvironment("Public"))
 }
 
 var preview = builder.Environment.IsEnvironment("Preview");
-if (!builder.Environment.IsDevelopment() && !preview)
+var staging = builder.Environment.IsEnvironment("Staging");
+if (!builder.Environment.IsDevelopment() && !preview && !staging)
 {
-    throw new InvalidOperationException("The fixture API is available only in the Development and private Preview environments.");
+    throw new InvalidOperationException("The fixture API is available only in the Development, Preview and Staging environments.");
 }
 
-var connectionString = builder.Configuration.GetConnectionString("Learning")
-    ?? throw new InvalidOperationException("Configure the local Learning database connection.");
+var connectionString = builder.Configuration.GetConnectionString(staging ? "StagingLearning" : "Learning")
+    ?? throw new InvalidOperationException("Configure the learning database connection for this environment.");
 builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
-var journalConnection = builder.Configuration.GetConnectionString("AccountDeletionJournal");
+var journalConnection = builder.Configuration.GetConnectionString(staging ? "StagingDeletionJournal" : "AccountDeletionJournal");
 if (!string.IsNullOrWhiteSpace(journalConnection))
 {
     builder.Services.AddSingleton(_ => new AccountDeletionJournal(connectionString, journalConnection));
@@ -56,12 +57,13 @@ builder.Services.AddSingleton<AccountSessions>();
 builder.Services.AddSingleton<IPasswordHasher<RegisteredAccount>, PasswordHasher<RegisteredAccount>>();
 builder.Services.AddProblemDetails();
 builder.Services.AddDataProtection()
-    .SetApplicationName("Verbulio.LocalLearning")
+    .SetApplicationName(staging ? "Verbulio.Staging" : "Verbulio.LocalLearning")
     .PersistKeysToFileSystem(new DirectoryInfo(
         builder.Configuration["LearningKeyDirectory"] ?? Path.Combine(builder.Environment.ContentRootPath, ".local-keys")));
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>
 {
     options.Cookie.Name = "verbulio.local-learning";
+    if (staging) options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.HttpOnly = true;
     options.ExpireTimeSpan = TimeSpan.FromDays(1);
@@ -111,6 +113,14 @@ builder.Services.AddSingleton(_ => PartitionedRateLimiter.Create<string, string>
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    if (staging)
+    {
+        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+            !context.Request.Path.StartsWithSegments("/api") && context.Request.Path != "/health"
+                ? RateLimitPartition.GetNoLimiter("static")
+                : RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? string.Empty,
+                    _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1) }));
+    }
     options.OnRejected = (context, _) =>
     {
         var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<AccountSessions>>();
@@ -156,11 +166,13 @@ builder.WebHost.ConfigureKestrel(options =>
     }
 });
 
+if (staging) PublicSite.Configure(builder);
 var app = builder.Build();
 app.UseExceptionHandler();
+if (staging) PublicSite.UseIngress(app);
 app.Use(async (context, next) =>
 {
-    if (context.Connection.RemoteIpAddress is not { } address || !IPAddress.IsLoopback(address))
+    if (!staging && (context.Connection.RemoteIpAddress is not { } address || !IPAddress.IsLoopback(address)))
     {
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         return;
@@ -184,7 +196,8 @@ app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
 
-app.MapGet("/health", () => TypedResults.Ok());
+if (staging) PublicSite.MapHealth(app, StagingReady);
+else app.MapGet("/health", () => TypedResults.Ok());
 var learning = app.MapGroup("/api/v1/local-learning");
 learning.MapPost("/identity", async (HttpContext http) =>
 {
@@ -202,7 +215,7 @@ MapLearningSessions(learning.MapGroup("/sessions").RequireAuthorization(), accou
 
 app.MapLocalPlacement();
 
-app.MapPost("/api/v1/local-registration/accounts", async (
+var registrationEndpoint = app.MapPost("/api/v1/local-registration/accounts", async (
     RegistrationRequest data, ClaimsPrincipal user, RegistrationStore store, CancellationToken cancellationToken) =>
 {
     var registration = AccountRegistration.FromRequest(data);
@@ -216,6 +229,7 @@ app.MapPost("/api/v1/local-registration/accounts", async (
         ? Problem(409, "registration_unavailable", "Nie udało się utworzyć konta z tymi danymi.")
         : Results.Json(account, statusCode: StatusCodes.Status201Created);
 }).RequireAuthorization().AddEndpointFilter(RequireLocalClient);
+if (staging) registrationEndpoint.RequireRateLimiting(accountLinkLimit);
 
 app.MapGet("/api/v1/local-registration/outcomes/{placementTestId:guid}", async (
     Guid placementTestId, ClaimsPrincipal user, RegistrationStore store, CancellationToken cancellationToken) =>
@@ -402,7 +416,7 @@ if (args.Contains("--migrate", StringComparer.Ordinal))
     return;
 }
 
-if (preview)
+if (preview || staging)
 {
     app.UseStaticFiles();
     app.Map("/api/{**path}", () => Results.NotFound());
@@ -410,6 +424,31 @@ if (preview)
 }
 
 await app.RunAsync();
+
+static async Task<bool> StagingReady(HttpContext context)
+{
+    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
+    timeout.CancelAfter(TimeSpan.FromSeconds(2));
+    try
+    {
+        var database = context.RequestServices.GetRequiredService<NpgsqlDataSource>();
+        await using var command = database.CreateCommand("SELECT id FROM accounts LIMIT 0");
+        await command.ExecuteNonQueryAsync(timeout.Token);
+        if (context.RequestServices.GetService<AccountDeletionJournal>() is { } journal)
+        {
+            await journal.CheckReadinessAsync(timeout.Token);
+        }
+        return true;
+    }
+    catch (NpgsqlException)
+    {
+        return false;
+    }
+    catch (OperationCanceledException) when (!context.RequestAborted.IsCancellationRequested)
+    {
+        return false;
+    }
+}
 
 static Guid? SessionId(ClaimsPrincipal? user) =>
     Guid.TryParseExact(user?.FindFirstValue(AccountSessions.IdClaim), "D", out var id) ? id : null;
