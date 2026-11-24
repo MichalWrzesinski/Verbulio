@@ -21,6 +21,7 @@ if (args.Length > 0 && args[0] == "--export-account")
 
 const string accountScheme = "LocalAccount";
 const string loginLimit = "LocalAccountLogin";
+const string confirmationLimit = "LocalEmailConfirmation";
 var builder = WebApplication.CreateBuilder(args);
 var preview = builder.Environment.IsEnvironment("Preview");
 if (!builder.Environment.IsDevelopment() && !preview)
@@ -38,6 +39,7 @@ if (!string.IsNullOrWhiteSpace(journalConnection))
     builder.Services.AddSingleton<AccountDeletion>();
 }
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddEmailConfirmation(builder.Configuration);
 builder.Services.AddSingleton<SessionStore>();
 builder.Services.AddSingleton<AccountSettingsStore>();
 builder.Services.AddSingleton<GuestPlacementStore>();
@@ -109,6 +111,13 @@ builder.Services.AddRateLimiter(options =>
     };
     options.AddPolicy(loginLimit, context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? string.Empty,
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 12,
+            Window = TimeSpan.FromMinutes(1),
+        }));
+    options.AddPolicy(confirmationLimit, context => RateLimitPartition.GetFixedWindowLimiter(
+        (context.Connection.RemoteIpAddress?.ToString(), context.GetEndpoint()?.DisplayName),
         _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = 12,
@@ -204,6 +213,7 @@ var account = app.MapGroup("/api/v1/local-account")
         ? next(context)
         : ValueTask.FromResult<object?>(Problem(400, "secure_connection_required", "Wymagane jest połączenie HTTPS.")));
 var accountOnly = new AuthorizeAttribute { AuthenticationSchemes = accountScheme };
+account.MapEmailConfirmation(accountOnly, confirmationLimit, RequireLocalClient);
 account.MapGet("/profile", async (HttpContext http, ClaimsPrincipal user, SessionStore store, CancellationToken cancellationToken) =>
     Results.Ok(await store.ProfileProgressAsync(Owner(user), StartingLevel(user), BrowserTimeZone(http), cancellationToken)))
     .RequireAuthorization(accountOnly);

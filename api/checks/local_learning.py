@@ -2,6 +2,7 @@
 
 import concurrent.futures
 import csv
+import hashlib
 import http.cookiejar
 import json
 import os
@@ -533,6 +534,36 @@ def exercise_account_export(command, env, directory, account, email, other_accou
     assert not list(Path(directory).glob(".verbulio-export-*.tmp"))
 
 
+def exercise_email_confirmation(container, owner, anonymous, account, other_account):
+    endpoint = ACCOUNT + "/email-confirmation"
+    anonymous.request(endpoint + "/send", 401, "POST")
+    owner.request(endpoint + "/send", 403, "POST", include_local_client=False)
+    assert owner.request(endpoint + "/send", 503, "POST")["code"] == "confirmation_delivery_unavailable"
+    token = uuid.uuid4().hex + uuid.uuid4().hex[:11]
+    digest = hashlib.sha256(token.encode()).hexdigest()
+
+    def sql(statement):
+        return subprocess.check_output(
+            ["docker", "exec", container, "psql", "-U", "postgres", "-d", "verbulio", "-At",
+             "-v", "ON_ERROR_STOP=1", "-c", statement], text=True, timeout=30
+        ).strip()
+
+    owner_id = uuid.UUID(account["id"])
+    peer_id = uuid.UUID(other_account["id"])
+    sql(f"UPDATE accounts SET email_confirmation_digest = decode('{digest}', 'hex'), "
+        f"email_confirmation_expires_at = now() + interval '1 minute' WHERE id = '{owner_id}'")
+    path = endpoint + "/confirm"
+    payload = {"token": token}
+    anonymous.request(path, 405)
+    anonymous.request(path, 403, "POST", payload, include_local_client=False)
+    anonymous.request(path, 400, "POST", {"token": "invalid"})
+    anonymous.request(path, 204, "POST", payload)
+    assert anonymous.request(path, 400, "POST", payload)["code"] == "invalid_confirmation_token"
+    assert sql(f"SELECT email_confirmed_at IS NOT NULL FROM accounts WHERE id = '{owner_id}'") == "t"
+    assert sql(f"SELECT email_confirmed_at IS NULL FROM accounts WHERE id = '{peer_id}'") == "t"
+    print("Account confirmation HTTPS endpoint, replay rejection and disabled delivery passed.")
+
+
 def exercise_account_deletion(command, env, container, owner, other, anonymous, login, account, other_account, placement):
     def postgres(*args):
         return subprocess.check_output(["docker", "exec", container, *args], text=True, timeout=30).strip()
@@ -693,6 +724,8 @@ basicConstraints = critical,CA:TRUE
                 exercise_account_learning(owner, other, anonymous, login, account, other_email, other_account,
                                           bool(env.get("ConnectionStrings__AccountDeletionJournal", "").strip()))
                 exercise_account_export(command, env, directory, account, email, other_account, other_email)
+                if container := env.get("VERBULIO_POSTGRES_CONTAINER"):
+                    exercise_email_confirmation(container, owner, anonymous, account, other_account)
                 assert owner.request(resource) == accepted["session"]
                 assert owner.request(resource + "/answers", 200, "POST", submission, key) == accepted
 
