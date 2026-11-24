@@ -1,29 +1,10 @@
-name: Deploy production
+name: Deploy staging
 
 on:
-  workflow_dispatch:
-    inputs:
-      ci_run_id:
-        description: Successful CI run ID from main
-        required: true
-        type: string
-      ci_run_attempt:
-        description: Successful attempt number of the CI run
-        required: true
-        type: string
-      artifact_id:
-        description: Immutable public artifact ID for that attempt
-        required: true
-        type: string
-      revision:
-        description: Full commit SHA of the approved candidate
-        required: true
-      artifact_sha256:
-        description: Approved GitHub artifact ZIP SHA-256
-        required: true
-      ingress_sha256:
-        description: Approved live Nginx snippet SHA-256
-        required: true
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
 
 permissions:
   actions: read
@@ -31,13 +12,15 @@ permissions:
 
 concurrency:
   group: verbulio-public-site
-  cancel-in-progress: false
+  queue: max
 
 jobs:
   deploy:
     if: >-
-      github.ref == 'refs/heads/main' && github.actor == 'MichalWrzesinski' &&
-      github.triggering_actor == 'MichalWrzesinski' && github.run_attempt == 1
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -45,34 +28,49 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
       - name: Verify the CI run and download its package
         env:
           GH_TOKEN: ${{ github.token }}
-          CI_RUN_ID: ${{ inputs.ci_run_id }}
-          CI_RUN_ATTEMPT: ${{ inputs.ci_run_attempt }}
-          ARTIFACT_ID: ${{ inputs.artifact_id }}
-          PUBLIC_REVISION: ${{ inputs.revision }}
-          ARTIFACT_SHA256: ${{ inputs.artifact_sha256 }}
-          INGRESS_SHA256: ${{ inputs.ingress_sha256 }}
+          CI_RUN_ID: ${{ github.event.workflow_run.id }}
+          CI_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          PUBLIC_REVISION: ${{ github.event.workflow_run.head_sha }}
         shell: bash
         run: |
           set -euo pipefail
           [[ "$(git rev-parse HEAD)" == "$PUBLIC_REVISION" ]]
+          if [[ "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)" != "$PUBLIC_REVISION" ]]; then
+            printf 'Skipping CI for a superseded main revision.\n'
+            exit 0
+          fi
+          name="verbulio-public-$CI_RUN_ATTEMPT"
+          artifact="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID/artifacts?name=$name" | jq -er --arg name "$name" '
+            [.artifacts[] | select(.name == $name and .expired == false)]
+              | if length == 1 then .[0] | [.id, (.digest | sub("^sha256:"; ""))] | @tsv else error("Expected one public artifact") end
+          ')"
+          IFS=$'\t' read -r ARTIFACT_ID ARTIFACT_SHA256 <<< "$artifact"
+          INGRESS_SHA256="$(sha256sum scripts/public/nginx-location.conf)"
+          INGRESS_SHA256="${INGRESS_SHA256%% *}"
           export VERIFIED_PUBLIC_ARCHIVE="$RUNNER_TEMP/verbulio-public.tar.gz"
           bash scripts/public/verify-candidate.sh "$PUBLIC_REVISION" "$CI_RUN_ID" "$CI_RUN_ATTEMPT" \
             "$ARTIFACT_ID" "$ARTIFACT_SHA256" "$INGRESS_SHA256" | tee -a "$GITHUB_STEP_SUMMARY"
           cd "$RUNNER_TEMP"
           sha256sum verbulio-public.tar.gz > SHA256SUMS
+          printf 'PUBLIC_REVISION=%s\nINGRESS_SHA256=%s\n' "$PUBLIC_REVISION" "$INGRESS_SHA256" >> "$GITHUB_ENV"
 
-      - name: Transfer the verified package and activate the public site
+      - name: Transfer the verified package and activate the staging site
+        if: env.PUBLIC_REVISION != ''
         env:
           PREVIEW_SSH_KEY: ${{ secrets.PREVIEW_SSH_KEY }}
-          PUBLIC_REVISION: ${{ inputs.revision }}
-          INGRESS_SHA256: ${{ inputs.ingress_sha256 }}
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)" != "$PUBLIC_REVISION" ]]; then
+            printf 'Skipping package for a superseded main revision.\n'
+            exit 0
+          fi
           if [[ -z "$PREVIEW_SSH_KEY" ]]; then
             printf 'Configure the dedicated PREVIEW_SSH_KEY secret first.\n' >&2
             exit 1
