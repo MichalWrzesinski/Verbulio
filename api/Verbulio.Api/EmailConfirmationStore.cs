@@ -5,22 +5,31 @@ using Npgsql;
 
 namespace Verbulio.Api;
 
+internal sealed record EmailConfirmationIssue(string Email, string Token);
+
 internal sealed class EmailConfirmationStore(NpgsqlDataSource dataSource, TimeProvider timeProvider)
 {
     internal static readonly TimeSpan Lifetime = TimeSpan.FromHours(24);
 
-    internal async Task<string?> IssueAsync(Guid accountId, CancellationToken cancellationToken)
+    internal async Task<EmailConfirmationIssue?> IssueAsync(Guid accountId, CancellationToken cancellationToken,
+        TimeSpan minimumInterval = default)
     {
         var token = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+        var expiresAt = timeProvider.GetUtcNow() + Lifetime;
         await using var command = dataSource.CreateCommand("""
             UPDATE accounts
             SET email_confirmation_digest = $1, email_confirmation_expires_at = $2
             WHERE id = $3 AND email_confirmed_at IS NULL
+                AND (email_confirmation_expires_at IS NULL OR email_confirmation_expires_at <= $4)
+            RETURNING email
             """);
         command.Parameters.AddWithValue(Digest(token));
-        command.Parameters.AddWithValue(timeProvider.GetUtcNow() + Lifetime);
+        command.Parameters.AddWithValue(expiresAt);
         command.Parameters.AddWithValue(accountId);
-        return await command.ExecuteNonQueryAsync(cancellationToken) == 1 ? token : null;
+        command.Parameters.AddWithValue(expiresAt - minimumInterval);
+        return await command.ExecuteScalarAsync(cancellationToken) is string email
+            ? new EmailConfirmationIssue(email, token)
+            : null;
     }
 
     internal async Task<bool> ConfirmAsync(string token, CancellationToken cancellationToken)
