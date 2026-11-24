@@ -16,6 +16,20 @@ describe('Public navigation', () => {
 
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
+  it('shows the public landing without links to unavailable features', async () => {
+    TestBed.inject(Router).resetConfig(
+      routes.map((route) =>
+        route.path === '' ? { ...route, data: { learningAvailable: false } } : route,
+      ),
+    );
+    const harness = await RouterTestingHarness.create('/');
+    const page = harness.routeNativeElement;
+
+    expect(page?.querySelector('h1')?.textContent).toBe('Angielski z Verbulio');
+    expect(page?.querySelector('main')?.textContent).toContain('jest w przygotowaniu');
+    expect(page?.querySelectorAll('main a, footer nav a')).toHaveLength(0);
+  });
+
   it('opens the local placement test from the reference landing', async () => {
     const harness = await RouterTestingHarness.create('/');
     const page = harness.routeNativeElement;

@@ -1,21 +1,31 @@
 <div class="site site--entry">
-<a class="skip" href="#tresc">Przejdź do treści</a>
-<header class="site-head">
-  <a class="brand" routerLink="/" aria-label="Verbulio, strona startowa"><img src="brand/logo-full.svg" alt=""></a>
-</header>
-<main class="entry" id="tresc">
-  <h1 class="h1">Zacznij naukę angielskiego</h1>
-  <p>Sprawdź swój poziom, aby zacząć od odpowiednich słówek. Masz już konto? Zaloguj się.</p>
-  <div class="actions">
-    <a class="key btn btn--primary" routerLink="/test">Sprawdź swój poziom</a>
-    <a class="link" routerLink="/logowanie">Zaloguj się</a>
-  </div>
-</main>
+  <a class="skip" href="#tresc">Przejdź do treści</a>
+  <header class="site-head">
+    <a class="brand" routerLink="/" aria-label="Verbulio, strona startowa">
+      <img src="brand/logo-full.svg" alt="" />
+    </a>
+  </header>
+  <main class="entry" id="tresc">
+    @if (learningAvailable) {
+      <h1 class="h1">Zacznij naukę angielskiego</h1>
+      <p>Sprawdź swój poziom, aby zacząć od odpowiednich słówek. Masz już konto? Zaloguj się.</p>
+      <div class="actions">
+        <a class="key btn btn--primary" routerLink="/test">Sprawdź swój poziom</a>
+        <a class="link" routerLink="/logowanie">Zaloguj się</a>
+      </div>
+    } @else {
+      <h1 class="h1">Angielski z Verbulio</h1>
+      <p>Verbulio pomaga uczyć się angielskich słówek i wracać do nich w powtórkach.</p>
+      <p>Publiczny dostęp do testu poziomu, nauki i kont jest w przygotowaniu.</p>
+    }
+  </main>
 </div>
 <footer class="legal-footer">
   <p>Copyright 2026 Verbulio</p>
-  <nav aria-label="Dokumenty prawne">
-    <a class="link" routerLink="/regulamin">Regulamin</a>
-    <a class="link" routerLink="/prywatnosc">Polityka prywatności</a>
-  </nav>
+  @if (learningAvailable) {
+    <nav aria-label="Dokumenty prawne">
+      <a class="link" routerLink="/regulamin">Regulamin</a>
+      <a class="link" routerLink="/prywatnosc">Polityka prywatności</a>
+    </nav>
+  }
 </footer>
