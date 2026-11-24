@@ -14,10 +14,10 @@ HOST = "verbulio.gitpush.app"
 FORWARDED = {"Host": HOST, "X-Forwarded-For": "192.0.2.10", "X-Forwarded-Proto": "https"}
 
 
-def request(path, headers=FORWARDED, method="GET", include_headers=False):
+def request(path, headers=FORWARDED, method="GET", include_headers=False, body=None):
     connection = http.client.HTTPConnection("127.0.0.1", 5444, timeout=2)
     try:
-        connection.request(method, path, headers=headers)
+        connection.request(method, path, body=body, headers=headers)
         response = connection.getresponse()
         payload = response.read()
         if include_headers:
@@ -105,7 +105,8 @@ def main():
             assert request("/health", {"Host": HOST})[0] == 400
             assert request("/api/v1/local-account/session")[0] == 401
             if journal:
-                assert request("/api/v1/local-account/delete", method="POST")[0] == 401
+                assert request("/api/v1/local-account/delete", method="POST", body="{}",
+                               headers=FORWARDED | {"Content-Type": "application/json"})[0] == 401
             status, _, headers = request("/api/v1/local-learning/identity",
                                          headers=FORWARDED | {"X-Verbulio-Client": "local-learning"},
                                          method="POST", include_headers=True)
