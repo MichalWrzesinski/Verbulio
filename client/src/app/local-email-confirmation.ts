@@ -10,8 +10,9 @@ import {
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
+import { watchAccountLink } from './account-link';
 import { accountEndpoint, accountRequestOptions } from './account-session-client';
 
 @Component({
@@ -81,8 +82,6 @@ export class LocalEmailConfirmation {
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
   private readonly heading = viewChild.required<ElementRef<HTMLElement>>('heading');
-  private readonly route = inject(ActivatedRoute);
-  private readonly router = inject(Router);
   private readonly linkChanged = new Subject<void>();
   private token: string | null = null;
 
@@ -92,28 +91,14 @@ export class LocalEmailConfirmation {
   protected readonly hasToken = signal(false);
 
   constructor() {
-    this.route.fragment.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((fragment) => {
-      if (fragment === null) return;
-
+    watchAccountLink((token) => {
       this.linkChanged.next();
-      this.token = fragment.match(/^token=([A-Za-z0-9_-]{43})$/)?.[1] ?? null;
-      this.hasToken.set(this.token !== null);
+      this.token = token;
+      this.hasToken.set(token !== null);
       this.pending.set(false);
       this.confirmed.set(false);
       this.error.set('');
-      afterNextRender(
-        () => {
-          if (this.route.snapshot.fragment !== fragment) return;
-
-          void this.router.navigate([], {
-            relativeTo: this.route,
-            queryParamsHandling: 'preserve',
-            replaceUrl: true,
-          });
-          this.heading().nativeElement.focus();
-        },
-        { injector: this.injector },
-      );
+      afterNextRender(() => this.heading().nativeElement.focus(), { injector: this.injector });
     });
     afterNextRender(() => this.heading().nativeElement.focus());
   }
