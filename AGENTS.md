@@ -9,3 +9,5 @@ Start with the [product overview](docs/product/overview.md) and [design referenc
 Use the commands in [README.md](README.md) to start the frontend. From `client/`, use `npm run build` for a production compilation and `npm test -- --watch=false` for frontend tests.
 
 The private GitHub Free repository uses an owner-approved manual integration gate. Integrate through a merge commit in a pull request only after checking the exact candidate against the current base, successful GitHub Actions frontend and backend jobs, and an independent review of that candidate. Recheck the gates when the head or relevant base changes. GitHub does not enforce this gate on the current plan.
+
+Public production uses one instance on port 5444. The owner accepts a brief interruption during replacement. On GitHub Free, only the human owner starts **Deploy production** from main after reviewing the exact artifact and ingress digests. The account identity check is technical, but the human-only dispatch rule is behavioral because the agent can share the owner's account. The agent may run read-only candidate verification.

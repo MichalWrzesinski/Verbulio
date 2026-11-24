@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-[[ $# == 2 && "$2" =~ ^[0-9a-f]{40}$ ]]
+[[ $# == 3 && "$2" =~ ^[0-9a-f]{40}$ && "$3" =~ ^[0-9a-f]{64}$ ]] || exit 2
 archive="$(realpath "$1")"
 revision="$2"
 source_dir="$(dirname "$archive")"
@@ -11,15 +11,17 @@ mkdir -p "$root/releases"
 cd "$root"
 exec 9>.deploy.lock
 flock -n 9
-if [[ -e /etc/nginx/snippets/verbulio-public.conf ]]; then
-  printf 'The staging workflow cannot replace a publicly activated release.\n' >&2
+ingress="$(sha256sum /etc/nginx/snippets/verbulio-public.conf)"
+if [[ "${ingress%% *}" != "$3" ]] || ! cmp -s /etc/nginx/snippets/verbulio-public.conf "$source_dir/nginx-location.conf"; then
+  printf 'Live Nginx ingress does not match the approved configuration.\n' >&2
   exit 1
 fi
 
 runtime_image=mcr.microsoft.com/dotnet/aspnet:10.0@sha256:aac50ceef10391e78a899e3d2ccd00bbafa2dcb56ccf4586cbccf00edb84fc21
 
 (cd "$source_dir" && sha256sum --strict -c SHA256SUMS)
-[[ "$(tar -xOzf "$archive" ./REVISION)" == "$revision" ]]
+archive_revision="$(tar -xOzf "$archive" ./REVISION)"
+[[ "$archive_revision" == "$revision" ]] || exit 1
 digest="$(sha256sum "$archive")"
 release="$root/releases/$revision-${digest%% *}"
 if [[ ! -d "$release" ]]; then
@@ -54,10 +56,12 @@ start() {
 }
 
 healthy() {
-  local attempt
+  local expected_revision="${1:-}" headers attempt
   for attempt in {1..20}; do
-    if curl --noproxy '*' --fail --silent --max-time 2 http://127.0.0.1:5444/health \
-      -H 'Host: verbulio.gitpush.app' -H 'X-Forwarded-For: 127.0.0.1' -H 'X-Forwarded-Proto: https' >/dev/null; then
+    if headers="$(curl --noproxy '*' --fail --silent --max-time 3 --dump-header - \
+      --output /dev/null https://verbulio.gitpush.app/health)" &&
+      { [[ -z "$expected_revision" ]] || printf '%s\n' "$headers" |
+        tr -d '\r' | grep -iqx "X-Verbulio-Revision: $expected_revision"; }; then
       return 0
     fi
     sleep 1
@@ -73,11 +77,11 @@ fi
 pointer="$(mktemp -d .promote.XXXXXX)"
 trap 'rm -rf -- "$pointer"' EXIT
 ln -s -- "$release" "$pointer/current-release"
-if start "$release" && healthy && mv -T -- "$pointer/current-release" current-release; then
-  printf 'Public release %s is healthy on loopback.\n' "$revision"
+if start "$release" && healthy "$revision" && mv -T -- "$pointer/current-release" current-release; then
+  printf 'Public release %s is healthy through public HTTPS.\n' "$revision"
   exit 0
 fi
-printf 'Public candidate failed its health check.\n' >&2
+printf 'Public candidate failed verification or promotion.\n' >&2
 if [[ -n "$previous" ]] && start "$previous" && healthy; then
   printf 'Restored the preceding public release.\n' >&2
 else
