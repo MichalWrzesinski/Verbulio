@@ -6,8 +6,9 @@ export function watchAccountLink(onLink: (token: string | null) => void): void {
   const route = inject(ActivatedRoute);
   const router = inject(Router);
   const injector = inject(Injector);
+  const destroyRef = inject(DestroyRef);
 
-  route.fragment.pipe(takeUntilDestroyed(inject(DestroyRef))).subscribe((fragment) => {
+  route.fragment.pipe(takeUntilDestroyed(destroyRef)).subscribe((fragment) => {
     if (fragment === null) return;
 
     onLink(fragment.match(/^token=([A-Za-z0-9_-]{43})$/)?.[1] ?? null);
@@ -15,10 +16,24 @@ export function watchAccountLink(onLink: (token: string | null) => void): void {
       () => {
         if (route.snapshot.fragment !== fragment) return;
 
-        void router.navigate([], {
+        const cleanUrl = router.createUrlTree([], {
           relativeTo: route,
           queryParamsHandling: 'preserve',
-          replaceUrl: true,
+        });
+        void router.navigateByUrl(cleanUrl, { replaceUrl: true }).then((cleaned) => {
+          if (
+            !cleaned ||
+            destroyRef.destroyed ||
+            router.currentNavigation() ||
+            router.url !== router.serializeUrl(cleanUrl)
+          )
+            return;
+
+          // Angular keeps one previous navigation. Replace it with the already scrubbed URL.
+          return router.navigateByUrl(cleanUrl, {
+            replaceUrl: true,
+            onSameUrlNavigation: 'reload',
+          });
         });
       },
       { injector },

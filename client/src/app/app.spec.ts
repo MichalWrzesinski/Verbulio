@@ -179,7 +179,14 @@ describe('Public navigation', () => {
 
   it('clears a reset link without showing credential fields on HTTP', async () => {
     const harness = await RouterTestingHarness.create('/nowe-haslo#token=' + 'a'.repeat(43));
-    await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/nowe-haslo'));
+    const router = TestBed.inject(Router);
+    await vi.waitFor(() => {
+      expect(router.url).toBe('/nowe-haslo');
+      const previous = router.lastSuccessfulNavigation()?.previousNavigation;
+      expect(previous?.initialUrl.fragment).toBeNull();
+      expect(previous?.extractedUrl.fragment).toBeNull();
+      expect(previous?.finalUrl?.fragment).toBeNull();
+    });
     expect(harness.routeNativeElement?.textContent).toContain('przez HTTPS');
     expect(harness.routeNativeElement?.querySelector('form')).toBeNull();
     TestBed.inject(HttpTestingController).expectNone(
