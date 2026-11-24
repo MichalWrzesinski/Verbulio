@@ -43,6 +43,9 @@ gzip -t "$fixture/verbulio-public.tar.gz" || fail "Site archive is damaged."
 archive_revision="$(tar -xOzf "$fixture/verbulio-public.tar.gz" ./REVISION)" || fail "Cannot read the site archive revision."
 [[ "$archive_revision" == "$revision" ]] || fail "Archive revision does not match."
 archive_hash="$(sha256sum "$fixture/verbulio-public.tar.gz")"
+if [[ -n "${VERIFIED_PUBLIC_ARCHIVE:-}" ]]; then
+  cp -- "$fixture/verbulio-public.tar.gz" "$VERIFIED_PUBLIC_ARCHIVE"
+fi
 
 printf 'Revision: %s\nCI run: %s (attempt %s)\nArtifact ID: %s\nArtifact ZIP SHA-256: %s\nSite archive SHA-256: %s\nNginx ingress SHA-256: %s\n' \
   "$revision" "$run_id" "$attempt" "$artifact_id" "$artifact_digest" "${archive_hash%% *}" "$ingress_digest"

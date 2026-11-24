@@ -1,4 +1,4 @@
-name: Deploy public site
+name: Deploy production
 
 on:
   workflow_dispatch:
@@ -15,6 +15,15 @@ on:
         description: Immutable public artifact ID for that attempt
         required: true
         type: string
+      revision:
+        description: Full commit SHA of the approved candidate
+        required: true
+      artifact_sha256:
+        description: Approved GitHub artifact ZIP SHA-256
+        required: true
+      ingress_sha256:
+        description: Approved live Nginx snippet SHA-256
+        required: true
 
 permissions:
   actions: read
@@ -26,7 +35,9 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' && github.actor == 'MichalWrzesinski' &&
+      github.triggering_actor == 'MichalWrzesinski' && github.run_attempt == 1
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -41,33 +52,24 @@ jobs:
           CI_RUN_ID: ${{ inputs.ci_run_id }}
           CI_RUN_ATTEMPT: ${{ inputs.ci_run_attempt }}
           ARTIFACT_ID: ${{ inputs.artifact_id }}
+          PUBLIC_REVISION: ${{ inputs.revision }}
+          ARTIFACT_SHA256: ${{ inputs.artifact_sha256 }}
+          INGRESS_SHA256: ${{ inputs.ingress_sha256 }}
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$CI_RUN_ID" =~ ^[0-9]+$ && "$CI_RUN_ATTEMPT" =~ ^[0-9]+$ && "$ARTIFACT_ID" =~ ^[0-9]+$ ]]
-          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID/attempts/$CI_RUN_ATTEMPT")"
-          revision="$(jq -er --arg repo "$GITHUB_REPOSITORY" '
-            select(.path == ".github/workflows/ci.yml" and .event == "push"
-              and .head_branch == "main" and .conclusion == "success"
-              and .head_repository.full_name == $repo) | .head_sha
-          ' <<< "$run")"
-          [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$(git rev-parse HEAD)" == "$revision" ]]
-          name="verbulio-public-$CI_RUN_ATTEMPT"
-          artifact="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID/artifacts?name=$name")"
-          jq -e --arg id "$ARTIFACT_ID" --arg name "$name" '
-            .artifacts | any((.id | tostring) == $id and .name == $name and .expired == false)
-          ' <<< "$artifact" >/dev/null
+          [[ "$(git rev-parse HEAD)" == "$PUBLIC_REVISION" ]]
+          export VERIFIED_PUBLIC_ARCHIVE="$RUNNER_TEMP/verbulio-public.tar.gz"
+          bash scripts/public/verify-candidate.sh "$PUBLIC_REVISION" "$CI_RUN_ID" "$CI_RUN_ATTEMPT" \
+            "$ARTIFACT_ID" "$ARTIFACT_SHA256" "$INGRESS_SHA256" | tee -a "$GITHUB_STEP_SUMMARY"
           cd "$RUNNER_TEMP"
-          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > public-artifact.zip
-          unzip -p public-artifact.zip verbulio-public.tar.gz > verbulio-public.tar.gz
-          [[ "$(tar -xOzf verbulio-public.tar.gz ./REVISION)" == "$revision" ]]
           sha256sum verbulio-public.tar.gz > SHA256SUMS
-          printf 'PUBLIC_REVISION=%s\n' "$revision" >> "$GITHUB_ENV"
 
       - name: Transfer the verified package and activate the public site
         env:
           PREVIEW_SSH_KEY: ${{ secrets.PREVIEW_SSH_KEY }}
+          PUBLIC_REVISION: ${{ inputs.revision }}
+          INGRESS_SHA256: ${{ inputs.ingress_sha256 }}
         shell: bash
         run: |
           set -euo pipefail
@@ -92,4 +94,4 @@ jobs:
           [[ "$remote" =~ ^/srv/Verbulio/\.incoming\.[A-Za-z0-9]{8}$ ]]
           scp "${ssh_options[@]}" "$RUNNER_TEMP/verbulio-public.tar.gz" "$RUNNER_TEMP/SHA256SUMS" \
             scripts/public/{nginx-location.conf,deploy.sh} "$PUBLIC_HOST:$remote/"
-          ssh "${ssh_options[@]}" "$PUBLIC_HOST" "bash '$remote/deploy.sh' '$remote/verbulio-public.tar.gz' '$PUBLIC_REVISION' && rm -rf -- '$remote'"
+          ssh "${ssh_options[@]}" "$PUBLIC_HOST" "bash '$remote/deploy.sh' '$remote/verbulio-public.tar.gz' '$PUBLIC_REVISION' '$INGRESS_SHA256' && rm -rf -- '$remote'"
