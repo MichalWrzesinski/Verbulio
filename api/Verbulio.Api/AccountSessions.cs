@@ -12,8 +12,9 @@ internal sealed class AccountSessions(NpgsqlDataSource dataSource, TimeProvider 
     internal static readonly TimeSpan Lifetime = TimeSpan.FromHours(8);
     internal static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(30);
 
-    internal async Task<AccountSession?> ReplaceAsync(Guid account, Guid? previous, CancellationToken cancellationToken)
+    internal async Task<AccountSession?> ReplaceAsync(VerifiedCredentials credentials, Guid? previous, CancellationToken cancellationToken)
     {
+        var account = credentials.Account.Id;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         Guid? previousOwner = null;
@@ -37,9 +38,10 @@ internal sealed class AccountSessions(NpgsqlDataSource dataSource, TimeProvider 
             await SessionStore.LockOwnerAsync(connection, transaction, last, cancellationToken);
         }
 
-        await using (var existing = new NpgsqlCommand("SELECT 1 FROM accounts WHERE id = $1", connection, transaction))
+        await using (var existing = new NpgsqlCommand("SELECT 1 FROM accounts WHERE id = $1 AND password_hash = $2", connection, transaction))
         {
             existing.Parameters.AddWithValue(account);
+            existing.Parameters.AddWithValue(credentials.PasswordHash);
             if (await existing.ExecuteScalarAsync(cancellationToken) is null) return null;
         }
 

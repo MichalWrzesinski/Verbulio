@@ -274,7 +274,7 @@ account.MapPost("/login", async (LoginRequest request, HttpContext http, Account
 
     await http.AuthenticateAsync(accountScheme);
     var previous = http.Items[AccountSessions.IdClaim] is Guid id ? id : (Guid?)null;
-    var session = await store.ReplaceAsync(user.Id, previous, cancellationToken);
+    var session = await store.ReplaceAsync(user, previous, cancellationToken);
     if (session is null)
     {
         return Problem(409, "session_rotation_conflict", "Sesja uległa zmianie. Sprawdź bieżące logowanie.");
@@ -283,7 +283,7 @@ account.MapPost("/login", async (LoginRequest request, HttpContext http, Account
     var identity = new ClaimsIdentity([new Claim(AccountSessions.IdClaim, session.Id.ToString())], accountScheme);
     await http.SignInAsync(accountScheme, new ClaimsPrincipal(identity),
         new AuthenticationProperties { ExpiresUtc = session.ExpiresAt });
-    return Results.Ok(user);
+    return Results.Ok(user.Account);
 }).RequireRateLimiting(loginLimit).AddEndpointFilter(RequireLocalClient);
 
 account.MapGet("/session", (ClaimsPrincipal user) =>

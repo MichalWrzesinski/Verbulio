@@ -10,13 +10,19 @@ internal sealed class LoginRequest
     public string? Password { get; init; }
 }
 
+internal sealed class VerifiedCredentials(RegisteredAccount account, string passwordHash)
+{
+    internal RegisteredAccount Account { get; } = account;
+    internal string PasswordHash { get; } = passwordHash;
+}
+
 internal sealed class AccountCredentials(
     NpgsqlDataSource dataSource, IPasswordHasher<RegisteredAccount> passwordHasher)
 {
     private static readonly RegisteredAccount UnknownAccount = new(Guid.Empty, VocabularyLevel.A1);
     private readonly string _unknownHash = passwordHasher.HashPassword(UnknownAccount, Guid.NewGuid().ToString());
 
-    internal async Task<RegisteredAccount?> VerifyAsync(LoginRequest request, CancellationToken cancellationToken)
+    internal async Task<VerifiedCredentials?> VerifyAsync(LoginRequest request, CancellationToken cancellationToken)
     {
         var email = request.Email?.Trim();
         if (email is null or { Length: 0 or > 254 } || email.Contains('\0')
@@ -41,6 +47,6 @@ internal sealed class AccountCredentials(
         }
 
         var verification = passwordHasher.VerifyHashedPassword(account ?? UnknownAccount, hash, password);
-        return verification == PasswordVerificationResult.Failed ? null : account;
+        return verification == PasswordVerificationResult.Failed || account is null ? null : new(account, hash);
     }
 }
