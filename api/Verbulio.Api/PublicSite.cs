@@ -9,13 +9,7 @@ internal static class PublicSite
 
     internal static async Task RunAsync(WebApplicationBuilder builder)
     {
-        var port = builder.Configuration.GetValue("PublicSite:Port", 5444);
-        if (port is not (5444 or 5445))
-        {
-            throw new InvalidOperationException("PublicSite:Port must be 5444 or 5445.");
-        }
-
-        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, port));
+        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 5444));
         builder.Services.Configure<ForwardedHeadersOptions>(options =>
         {
             options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;

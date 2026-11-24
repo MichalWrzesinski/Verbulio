@@ -14,8 +14,8 @@ HOST = "verbulio.gitpush.app"
 FORWARDED = {"Host": HOST, "X-Forwarded-For": "192.0.2.10", "X-Forwarded-Proto": "https"}
 
 
-def request(path, headers=FORWARDED, method="GET", include_headers=False, port=5444):
-    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+def request(path, headers=FORWARDED, method="GET", include_headers=False):
+    connection = http.client.HTTPConnection("127.0.0.1", 5444, timeout=2)
     try:
         connection.request(method, path, headers=headers)
         response = connection.getresponse()
@@ -46,7 +46,7 @@ def verify():
 
 
 @contextmanager
-def site(port, revision):
+def site(revision):
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         assets = root / "wwwroot"
@@ -57,8 +57,6 @@ def site(port, revision):
         env = {key: value for key, value in os.environ.items()
                if not key.startswith(("ConnectionStrings__", "ASPNETCORE_", "DOTNET_ENVIRONMENT", "PublicSite__"))}
         env["ASPNETCORE_ENVIRONMENT"] = "Public"
-        if port is not None:
-            env["PublicSite__Port"] = str(port)
         with (root / "server.log").open("w+") as log:
             with subprocess.Popen([sys.argv[1] if len(sys.argv) > 1 else "dotnet", str(API)],
                                   cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT) as server:
@@ -67,7 +65,7 @@ def site(port, revision):
                         if server.poll() is not None:
                             raise RuntimeError("The public server exited.")
                         try:
-                            status, _, headers = request("/health", include_headers=True, port=port or 5444)
+                            status, _, headers = request("/health", include_headers=True)
                             if status == 200 and headers.get("x-verbulio-revision") == revision:
                                 break
                         except OSError:
@@ -86,18 +84,9 @@ def site(port, revision):
 
 
 def main():
-    current = "a" * 40
-    candidate = "b" * 40
-    with site(None, current), site(5445, candidate):
+    with site("a" * 40):
         verify()
-        for port, revision in ((5444, current), (5445, candidate)):
-            status, _, headers = request("/health", include_headers=True, port=port)
-            assert status == 200 and headers["x-verbulio-revision"] == revision
-            assert request("/api/v1/local-registration/accounts", method="POST", port=port)[0] == 404
-            assert request("/health", {"Host": HOST}, port=port)[0] == 400
-            assert request("/", port=port) == (200, b"<h1>Public Verbulio fixture</h1>")
-
-    print("Public runtime passed: two isolated loopback instances, revision-aware health and closed account API.")
+    print("Public runtime passed: loopback, revision-aware health and closed account API.")
 
 
 if __name__ == "__main__":
